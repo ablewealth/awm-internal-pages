@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plan Walkthrough — Data Entry & PDF Generator</title>
+<style>
+/* ============================================================
+   Inlined AWM tokens (subset of colors_and_type.css used here)
+   ============================================================ */
+:root{
+  --bone:#F6F3EE; --sand:#ECE3CF; --paper:#FBF8F2; --hairline:#E6E1D8;
+  --ink:#15245A; --slate:#515A72; --slate-mute:#8A8E9C;
+  --rust:#C2572A; --rust-deep:#B3491C;
+  --serif:"Larken","Cormorant","Source Serif 4",Georgia,"Times New Roman",serif;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@import url('https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,300;0,400;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ============================================================
+   Acrobat-Ready page CSS — copied verbatim so preview is pixel
+   identical to the source design (forms/Plan Walkthrough -
+   Acrobat Ready.html).
+   ============================================================ */
+.preview-root{
+  --page-w: 8.5in; --page-h: 11in; --rail: 0.6in;
+  --hair: #C9C2B3; --field-border: #9C9482; --field-bg:#FFFFFF;
+  font-family:var(--sans); color:var(--ink);
+  font-feature-settings:"tnum","lnum";
+  -webkit-font-smoothing:antialiased;
+}
+.preview-root *{ box-sizing:border-box; }
+.preview-root .stack{
+  display:flex; flex-direction:column; align-items:center;
+  gap:24px; padding:32px 0 64px;
+}
+.preview-root .page{
+  width:var(--page-w); height:var(--page-h);
+  background:#FFFFFF;
+  box-shadow:0 30px 60px -30px rgba(21,36,90,.25),
+             0 4px 12px -4px rgba(21,36,90,.08);
+  position:relative; overflow:hidden;
+}
+.preview-root .page-inner{
+  position:absolute; inset:0;
+  padding: 0.55in var(--rail) 0.45in;
+  display:flex; flex-direction:column;
+}
+.preview-root .mast{
+  display:grid; grid-template-columns: 1fr auto;
+  align-items:flex-start; column-gap:36px;
+}
+.preview-root .mast .chap{
+  font-family:var(--sans); font-size:10.5px; font-weight:500;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--rust);
+}
+.preview-root .mast h1{
+  margin:18px 0 0;
+  font-family:var(--serif); font-weight:300;
+  font-size:42px; line-height:1; letter-spacing:-.015em; color:var(--ink);
+}
+.preview-root .mast h1 em{ font-style:italic; color:var(--rust); }
+.preview-root .mast .right{ text-align:right; }
+.preview-root .shield{ width:32px; height:auto; margin-left:auto; display:block; }
+
+.preview-root .ident{
+  margin-top:20px;
+  display:grid; grid-template-columns: 1.4fr 1fr 1fr;
+  column-gap:18px;
+}
+.preview-root .field{ display:flex; flex-direction:column; gap:6px; }
+.preview-root .field .k{
+  font-family:var(--sans); font-size:10px; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--slate);
+}
+.preview-root .field .v{
+  background:var(--field-bg);
+  border:1px solid var(--field-border);
+  height:30px; border-radius:1px;
+  padding:6px 10px;
+  font-family:var(--serif); font-weight:300; font-size:15px;
+  color:var(--ink); line-height:18px;
+  font-feature-settings:"tnum","lnum";
+  overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+}
+
+.preview-root .rule-thin{ height:1px; background:var(--hair); margin:22px 0 0; }
+
+.preview-root .sec{
+  margin:22px 0 12px;
+  display:grid; grid-template-columns:auto 1fr;
+  column-gap:18px; align-items:center;
+}
+.preview-root .sec .lbl{
+  font-family:var(--sans); font-size:11.5px; font-weight:500;
+  letter-spacing:.18em; text-transform:uppercase; color:var(--ink);
+}
+.preview-root .sec .num{
+  font-family:var(--serif); font-style:italic; font-weight:300;
+  font-size:13px; color:var(--rust);
+}
+.preview-root .sec .head{ display:flex; align-items:baseline; gap:14px; }
+.preview-root .sec .fill{ height:1px; background:var(--hair); }
+
+.preview-root .ledger{
+  display:grid; grid-template-columns: repeat(3, 1fr);
+  column-gap:24px; row-gap:14px;
+}
+.preview-root .kpi{ display:flex; flex-direction:column; gap:6px; }
+.preview-root .kpi .k{
+  font-family:var(--sans); font-size:10.5px; font-weight:500;
+  color:var(--slate); letter-spacing:.02em; text-transform:uppercase;
+}
+.preview-root .kpi .v{
+  background:var(--field-bg);
+  border:1px solid var(--field-border);
+  border-radius:1px;
+  height:40px;
+  padding:9px 12px;
+  font-family:var(--serif); font-weight:300; font-size:18px;
+  color:var(--ink); line-height:22px;
+  font-feature-settings:"tnum","lnum";
+  overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+}
+
+.preview-root .alloc-grid{
+  display:grid; grid-template-columns: repeat(4, 1fr);
+  column-gap:18px;
+}
+
+.preview-root .obs-table{
+  margin-top:4px;
+  display:grid; grid-template-columns: 36px 1fr 2.4fr;
+  border:1px solid var(--field-border);
+}
+.preview-root .obs-table .h{
+  font-family:var(--sans); font-size:10px; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--slate);
+  padding:7px 10px; background:#F2EDE3;
+  border-bottom:1px solid var(--field-border);
+  border-right:1px solid var(--field-border);
+}
+.preview-root .obs-table .h:last-of-type{ border-right:none; }
+.preview-root .obs-table .c{
+  padding:10px;
+  border-bottom:1px solid var(--field-border);
+  border-right:1px solid var(--field-border);
+  min-height:38px; background:var(--field-bg);
+  font-family:var(--sans); font-size:11.5px; color:var(--ink);
+  line-height:1.45;
+}
+.preview-root .obs-table .c:nth-child(3n){ border-right:none; }
+.preview-root .obs-table .row-last{ border-bottom:none; }
+.preview-root .obs-table .c.num{
+  font-family:var(--serif); font-style:italic; color:var(--rust);
+  text-align:center; line-height:38px; padding:0;
+}
+
+.preview-root .strat-table{
+  margin-top:4px;
+  display:grid; grid-template-columns: 110px 1.3fr 2fr 1.3fr;
+  border:1px solid var(--field-border);
+}
+.preview-root .strat-table .h{
+  font-family:var(--sans); font-size:10px; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--slate);
+  padding:7px 10px; background:#F2EDE3;
+  border-bottom:1px solid var(--field-border);
+  border-right:1px solid var(--field-border);
+}
+.preview-root .strat-table .h:nth-child(4){ border-right:none; }
+.preview-root .strat-table .c{
+  padding:10px;
+  border-bottom:1px solid var(--field-border);
+  border-right:1px solid var(--field-border);
+  min-height:48px; background:var(--field-bg);
+  font-family:var(--sans); font-size:11.5px; color:var(--ink);
+  line-height:1.45;
+}
+.preview-root .strat-table .c:nth-child(4n){ border-right:none; }
+.preview-root .strat-table .c.group{
+  font-family:var(--serif); font-style:italic; font-size:14px;
+  color:var(--ink); background:#FBF8F2;
+  display:flex; align-items:center;
+}
+
+.preview-root .timeline-table{
+  margin-top:4px;
+  display:grid; grid-template-columns: 90px 1.3fr 2fr 1fr;
+  border:1px solid var(--field-border);
+}
+.preview-root .timeline-table .h{
+  font-family:var(--sans); font-size:10px; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--slate);
+  padding:7px 10px; background:#F2EDE3;
+  border-bottom:1px solid var(--field-border);
+  border-right:1px solid var(--field-border);
+}
+.preview-root .timeline-table .h:nth-child(4){ border-right:none; }
+.preview-root .timeline-table .c{
+  padding:10px;
+  border-bottom:1px solid var(--field-border);
+  border-right:1px solid var(--field-border);
+  min-height:44px; background:var(--field-bg);
+  font-family:var(--sans); font-size:11.5px; color:var(--ink);
+  line-height:1.45;
+}
+.preview-root .timeline-table .c:nth-child(4n){ border-right:none; }
+
+.preview-root .notes-box{
+  background:var(--field-bg);
+  border:1px solid var(--field-border);
+  height:110px;
+  padding:10px 12px;
+  font-family:var(--sans); font-size:11.5px;
+  color:var(--ink); line-height:1.5; white-space:pre-wrap;
+  overflow:hidden;
+}
+
+.preview-root .colophon{
+  margin-top:auto; padding-top:12px;
+  display:flex; justify-content:space-between; align-items:center;
+  border-top:1px solid var(--hair);
+  font-family:var(--sans); font-size:9.5px; font-weight:500;
+  letter-spacing:.18em; text-transform:uppercase; color:var(--slate-mute);
+}
+.preview-root .colophon .accent{ color:var(--rust); }
+
+/* ============================================================
+   App chrome — only on screen, never in printed PDF
+   ============================================================ */
+body{
+  margin:0; background:#E9E4DB;
+  font-family:var(--sans); color:var(--ink);
+}
+.app{
+  display:grid; grid-template-columns: 420px 1fr;
+  min-height:100vh;
+}
+.sidebar{
+  background:#FBF8F2;
+  border-right:1px solid var(--hairline);
+  padding:24px 22px 80px;
+  overflow-y:auto; max-height:100vh;
+  position:sticky; top:0;
+}
+.sidebar h2{
+  font-family:var(--serif); font-weight:300; font-size:24px;
+  margin:0 0 4px; letter-spacing:-.01em;
+}
+.sidebar h2 em{ color:var(--rust); font-style:italic; }
+.sidebar .tag{
+  font-size:10px; font-weight:500; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--rust);
+}
+.sidebar .lead{
+  font-size:12.5px; color:var(--slate); line-height:1.5;
+  margin:10px 0 18px;
+}
+.actions{
+  position:sticky; top:0; z-index:5;
+  background:#FBF8F2; padding:10px 0 14px;
+  border-bottom:1px solid var(--hairline);
+  margin:-24px -22px 18px; padding:18px 22px 14px;
+  display:flex; gap:8px; flex-wrap:wrap;
+}
+.btn{
+  font-family:var(--sans); font-size:12px; font-weight:600;
+  letter-spacing:.04em;
+  padding:9px 14px; border-radius:2px; border:1px solid var(--ink);
+  background:var(--ink); color:#fff; cursor:pointer;
+}
+.btn.secondary{ background:#fff; color:var(--ink); }
+.btn.ghost{ background:transparent; color:var(--slate); border-color:var(--hairline); }
+.btn:hover{ filter:brightness(.95); }
+
+details.group{
+  border:1px solid var(--hairline); border-radius:3px;
+  background:#fff; margin-bottom:10px;
+}
+details.group > summary{
+  list-style:none; cursor:pointer;
+  padding:11px 14px;
+  font-size:10.5px; font-weight:600; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--ink);
+  display:flex; justify-content:space-between; align-items:center;
+}
+details.group > summary::after{
+  content:"+"; color:var(--rust); font-family:var(--serif);
+  font-size:18px; line-height:1;
+}
+details.group[open] > summary::after{ content:"−"; }
+details.group .body{
+  padding:6px 14px 14px;
+  border-top:1px solid var(--hairline);
+}
+
+.row{ display:flex; flex-direction:column; gap:4px; margin-top:10px; }
+.row label{
+  font-size:10px; font-weight:500; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--slate);
+}
+.row input, .row textarea, .row select{
+  font-family:var(--sans); font-size:13px; color:var(--ink);
+  border:1px solid #D9D2C3; border-radius:2px;
+  background:#fff; padding:7px 9px;
+  width:100%;
+}
+.row textarea{ resize:vertical; min-height:64px; line-height:1.4; }
+.row input:focus, .row textarea:focus, .row select:focus{
+  outline:none; border-color:var(--rust);
+  box-shadow:0 0 0 3px rgba(194,87,42,.15);
+}
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.grid4{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; }
+
+.tbl-row{
+  display:grid; gap:6px;
+  padding:10px 0; border-bottom:1px dashed var(--hairline);
+}
+.tbl-row:last-child{ border-bottom:none; }
+.tbl-row.obs{ grid-template-columns: 1fr 1.6fr; }
+.tbl-row.strat{ grid-template-columns: .9fr 1fr 1.4fr 1fr; }
+.tbl-row.timeline{ grid-template-columns: .6fr 1fr 1.4fr .9fr; }
+.tbl-row input{
+  font-family:var(--sans); font-size:12px;
+  border:1px solid #D9D2C3; border-radius:2px;
+  padding:6px 8px; background:#fff; color:var(--ink); width:100%;
+}
+.tbl-row .num{
+  font-family:var(--serif); font-style:italic; color:var(--rust);
+  font-size:13px; padding:6px 0; text-align:center;
+}
+.tbl-hdr{
+  display:grid; gap:6px;
+  font-size:9.5px; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--slate);
+  padding-bottom:4px; border-bottom:1px solid var(--hairline);
+  margin-top:6px;
+}
+.tbl-hdr.obs{ grid-template-columns: 1fr 1.6fr; }
+.tbl-hdr.strat{ grid-template-columns: .9fr 1fr 1.4fr 1fr; }
+.tbl-hdr.timeline{ grid-template-columns: .6fr 1fr 1.4fr .9fr; }
+
+.preview-wrap{
+  padding:24px 0 60px;
+  display:flex; justify-content:center;
+  overflow:auto; max-height:100vh;
+}
+
+/* ============================================================
+   PRINT — only the .preview-root pages get printed. Form/UI
+   is hidden. Pages tile 1-per-sheet, US-Letter, no margins.
+   ============================================================ */
+@page { size: 8.5in 11in; margin: 0; }
+@media print {
+  html, body { background:#FFFFFF; }
+  .sidebar, .actions { display:none !important; }
+  .app { display:block; }
+  .preview-wrap { padding:0; overflow:visible; max-height:none; }
+  .preview-root .stack { padding:0; gap:0; }
+  .preview-root .page {
+    box-shadow:none;
+    width:8.5in; height:11in;
+    page-break-after: always;
+  }
+  .preview-root .page:last-child { page-break-after: auto; }
+}
+
+/* Tiny inline-help banner above the form */
+.helpbox{
+  background:#fff; border:1px solid var(--hairline); border-left:3px solid var(--rust);
+  padding:10px 12px; font-size:11.5px; color:var(--slate);
+  line-height:1.5; margin-bottom:14px;
+}
+.helpbox b{ color:var(--ink); }
+.kbd{
+  font-family: ui-monospace,"SF Mono",Menlo,monospace; font-size:10.5px;
+  background:#EFE9DC; padding:1px 5px; border-radius:2px; color:var(--ink);
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============================ SIDEBAR / FORM ============================ -->
+  <aside class="sidebar">
+    <div class="actions">
+      <button class="btn" id="btn-pdf">Save as PDF</button>
+      <button class="btn secondary" id="btn-sample">Load sample</button>
+      <button class="btn ghost" id="btn-reset">Reset</button>
+    </div>
+
+    <div class="tag">Able Wealth Management</div>
+    <h2>Plan Walkthrough <em>tool.</em></h2>
+    <p class="lead">Fill in the fields below — the preview updates live. When you're done, click <b>Save as PDF</b> and choose “Save as PDF” as the destination in the print dialog.</p>
+
+    <div class="helpbox">
+      <b>Tip:</b> In Chrome's print dialog, set <span class="kbd">Margins: None</span> and <span class="kbd">Background graphics: ON</span> for the cleanest output.
+    </div>
+
+    <!-- ========== SHARED ========== -->
+    <details class="group" open>
+      <summary>Document · shared identity</summary>
+      <div class="body">
+        <div class="row"><label>Household</label><input data-bind="shared.household" type="text"></div>
+        <div class="grid2">
+          <div class="row"><label>As of</label><input data-bind="shared.asof" type="text"></div>
+          <div class="row"><label>Advisor</label><input data-bind="shared.advisor" type="text"></div>
+        </div>
+        <p style="font-size:11px;color:var(--slate);margin:10px 0 0;line-height:1.45;">
+          These three values appear on all three pages.
+        </p>
+      </div>
+    </details>
+
+    <!-- ========== PAGE I ========== -->
+    <details class="group">
+      <summary>Part I · Position</summary>
+      <div class="body">
+        <h4 style="margin:6px 0 4px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);">Balance sheet snapshot</h4>
+        <div class="grid2">
+          <div class="row"><label>Net worth</label><input data-bind="p1.networth" type="text"></div>
+          <div class="row"><label>Liquid assets</label><input data-bind="p1.liquid" type="text"></div>
+          <div class="row"><label>Retirement assets</label><input data-bind="p1.retirement" type="text"></div>
+          <div class="row"><label>Concentrated equity %</label><input data-bind="p1.concentrated" type="text"></div>
+          <div class="row"><label>Liabilities</label><input data-bind="p1.liabilities" type="text"></div>
+          <div class="row"><label>Insurance cover</label><input data-bind="p1.insurance" type="text"></div>
+        </div>
+
+        <h4 style="margin:16px 0 4px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);">Current allocation</h4>
+        <div class="grid4">
+          <div class="row"><label>Equities %</label><input data-bind="p1.eq" type="text"></div>
+          <div class="row"><label>Fixed income %</label><input data-bind="p1.fi" type="text"></div>
+          <div class="row"><label>Alternatives %</label><input data-bind="p1.alt" type="text"></div>
+          <div class="row"><label>Cash %</label><input data-bind="p1.cash" type="text"></div>
+        </div>
+
+        <h4 style="margin:16px 0 4px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);">Observations</h4>
+        <div class="tbl-hdr obs"><span>Area</span><span>Observation</span></div>
+        <div id="obs-rows"></div>
+      </div>
+    </details>
+
+    <!-- ========== PAGE II ========== -->
+    <details class="group">
+      <summary>Part II · Strategy</summary>
+      <div class="body">
+        <h4 style="margin:6px 0 4px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);">Strategies, grouped by intent</h4>
+        <div class="tbl-hdr strat"><span>Group</span><span>Strategy</span><span>Rationale</span><span>Tool / instrument</span></div>
+        <div id="strat-rows"></div>
+
+        <div class="row"><label>Strategy notes</label><textarea data-bind="p2.notes" rows="4"></textarea></div>
+      </div>
+    </details>
+
+    <!-- ========== PAGE III ========== -->
+    <details class="group">
+      <summary>Part III · Timeline</summary>
+      <div class="body">
+        <h4 style="margin:6px 0 4px;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink);">Quarterly sequence</h4>
+        <div class="tbl-hdr timeline"><span>Quarter</span><span>Strategy</span><span>Action / milestone</span><span>Owner</span></div>
+        <div id="timeline-rows"></div>
+
+        <div class="row"><label>Sequencing rationale</label><textarea data-bind="p3.rationale" rows="4"></textarea></div>
+      </div>
+    </details>
+  </aside>
+
+  <!-- ============================ PREVIEW ============================ -->
+  <main class="preview-wrap">
+    <div class="preview-root">
+      <div class="stack">
+
+        <!-- ===== PAGE I ===== -->
+        <section class="page">
+          <div class="page-inner">
+            <header class="mast">
+              <div>
+                <div class="chap">Part I of III · Position</div>
+                <h1>Where you<br>stand <em>today.</em></h1>
+              </div>
+              <div class="right"><div class="shield" id="shield-1"></div></div>
+            </header>
+
+            <div class="ident">
+              <div class="field"><span class="k">Household</span><span class="v" data-out="shared.household"></span></div>
+              <div class="field"><span class="k">As of</span><span class="v" data-out="shared.asof"></span></div>
+              <div class="field"><span class="k">Advisor</span><span class="v" data-out="shared.advisor"></span></div>
+            </div>
+            <div class="rule-thin"></div>
+
+            <div class="sec">
+              <div class="head"><span class="num">i.</span><span class="lbl">Balance sheet snapshot</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="ledger">
+              <div class="kpi"><span class="k">Net worth</span><span class="v" data-out="p1.networth"></span></div>
+              <div class="kpi"><span class="k">Liquid assets</span><span class="v" data-out="p1.liquid"></span></div>
+              <div class="kpi"><span class="k">Retirement assets</span><span class="v" data-out="p1.retirement"></span></div>
+              <div class="kpi"><span class="k">Concentrated equity %</span><span class="v" data-out="p1.concentrated"></span></div>
+              <div class="kpi"><span class="k">Liabilities</span><span class="v" data-out="p1.liabilities"></span></div>
+              <div class="kpi"><span class="k">Insurance cover</span><span class="v" data-out="p1.insurance"></span></div>
+            </div>
+
+            <div class="sec">
+              <div class="head"><span class="num">ii.</span><span class="lbl">Current allocation</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="alloc-grid">
+              <div class="kpi"><span class="k">Equities %</span><span class="v" data-out="p1.eq"></span></div>
+              <div class="kpi"><span class="k">Fixed income %</span><span class="v" data-out="p1.fi"></span></div>
+              <div class="kpi"><span class="k">Alternatives %</span><span class="v" data-out="p1.alt"></span></div>
+              <div class="kpi"><span class="k">Cash %</span><span class="v" data-out="p1.cash"></span></div>
+            </div>
+
+            <div class="sec">
+              <div class="head"><span class="num">iii.</span><span class="lbl">Observations</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="obs-table" id="obs-table"></div>
+
+            <div class="colophon">
+              <span class="accent">Part I of III · Position</span>
+              <span>Confidential · Illustrative · ablewealth.com</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== PAGE II ===== -->
+        <section class="page">
+          <div class="page-inner">
+            <header class="mast">
+              <div>
+                <div class="chap">Part II of III · Strategy</div>
+                <h1>The plan,<br>to be <em>put in motion.</em></h1>
+              </div>
+              <div class="right"><div class="shield" id="shield-2"></div></div>
+            </header>
+
+            <div class="ident">
+              <div class="field"><span class="k">Household</span><span class="v" data-out="shared.household"></span></div>
+              <div class="field"><span class="k">As of</span><span class="v" data-out="shared.asof"></span></div>
+              <div class="field"><span class="k">Advisor</span><span class="v" data-out="shared.advisor"></span></div>
+            </div>
+            <div class="rule-thin"></div>
+
+            <div class="sec">
+              <div class="head"><span class="num">iv.</span><span class="lbl">Strategies, grouped by intent</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="strat-table" id="strat-table"></div>
+
+            <div class="sec" style="margin:18px 0 8px">
+              <div class="head"><span class="num">v.</span><span class="lbl">Strategy notes</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="notes-box" data-out="p2.notes"></div>
+
+            <div class="colophon">
+              <span class="accent">Part II of III · Strategy</span>
+              <span>Confidential · Illustrative · ablewealth.com</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== PAGE III ===== -->
+        <section class="page">
+          <div class="page-inner">
+            <header class="mast">
+              <div>
+                <div class="chap">Part III of III · Timeline</div>
+                <h1>Order of <em>operations.</em></h1>
+              </div>
+              <div class="right"><div class="shield" id="shield-3"></div></div>
+            </header>
+
+            <div class="ident">
+              <div class="field"><span class="k">Household</span><span class="v" data-out="shared.household"></span></div>
+              <div class="field"><span class="k">As of</span><span class="v" data-out="shared.asof"></span></div>
+              <div class="field"><span class="k">Advisor</span><span class="v" data-out="shared.advisor"></span></div>
+            </div>
+            <div class="rule-thin"></div>
+
+            <div class="sec">
+              <div class="head"><span class="num">vi.</span><span class="lbl">Quarterly sequence</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="timeline-table" id="timeline-table"></div>
+
+            <div class="sec" style="margin:18px 0 8px">
+              <div class="head"><span class="num">vii.</span><span class="lbl">Sequencing rationale</span></div>
+              <span class="fill"></span>
+            </div>
+            <div class="notes-box" data-out="p3.rationale"></div>
+
+            <div class="colophon">
+              <span class="accent">Part III of III · Timeline</span>
+              <span>Confidential · Illustrative · ablewealth.com</span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ============================================================
+   Shield SVG (inlined so the tool is fully self-contained)
+   ============================================================ */
+const SHIELD_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 210" role="img" aria-label="Able Wealth Management shield">
+  <defs>
+    <clipPath id="awm-shield-clip">
+      <path d="M0 0 L200 0 L200 124 C200 187 156 210 100 210 C44 210 0 187 0 124 Z"></path>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#awm-shield-clip)">
+    <rect width="200" height="210" fill="#15245A"></rect>
+    <polygon points="100,0 -75,250 100,250" fill="#C2572A"></polygon>
+    <polygon points="100,0 275,250 100,250" fill="#E9A93B"></polygon>
+    <polygon points="100,103 -8,250 208,250" fill="#F4C842"></polygon>
+    <polygon points="100,103 -8,250 100,250" fill="#C79338"></polygon>
+  </g>
+</svg>`;
+for (const id of ['shield-1','shield-2','shield-3']) {
+  // Each masthead gets its own copy (clipPath ids are scoped per-svg by browser).
+  document.getElementById(id).innerHTML = SHIELD_SVG;
+}
+
+/* ============================================================
+   Data model — mirrors the source design's 4/6/7-row tables.
+   Row counts are intentional: they fit one US-Letter page.
+   ============================================================ */
+const ROMAN = ['i.','ii.','iii.','iv.','v.','vi.','vii.','viii.'];
+const QUARTERS_DEFAULT = ['Q1','Q2','Q3','Q4','Q1+1','Q2+1','Q3+1'];
+
+const state = {
+  shared: { household:'', asof:'', advisor:'' },
+  p1: { networth:'', liquid:'', retirement:'',
+        concentrated:'', liabilities:'', insurance:'',
+        eq:'', fi:'', alt:'', cash:'' },
+  p2: { notes:'' },
+  p3: { rationale:'' },
+  obs: Array.from({length:4}, () => ({ area:'', text:'' })),
+  strat: Array.from({length:6}, () => ({ group:'', strategy:'', rationale:'', tool:'' })),
+  timeline: Array.from({length:7}, (_, i) => ({
+    quarter: QUARTERS_DEFAULT[i] || '',
+    strategy:'', action:'', owner:''
+  })),
+};
+
+const SAMPLE = {
+  shared: { household:'Chen Family Trust', asof:'May 20, 2026', advisor:'M. Hodes' },
+  p1: { networth:'$4.82M', liquid:'$612K', retirement:'$1.94M',
+        concentrated:'38%', liabilities:'$840K', insurance:'$3.5M term',
+        eq:'62%', fi:'24%', alt:'10%', cash:'4%' },
+  p2: { notes:'Sequence the Roth conversions ahead of the equity diversification — tax bracket window closes 2027. Protection layer is the lowest-effort win and should land first.' },
+  p3: { rationale:'Front-load the protection and tax work in the low-income year. Diversification trades sequenced after Roth conversions to manage AGI. Legacy structuring slotted last, post-attorney engagement.' },
+  obs: [
+    { area:'Concentration', text:'38% of liquid net worth held in a single public-co RSU position vesting through 2028.' },
+    { area:'Tax exposure',  text:'No Roth conversions executed; runway through 2027 before bracket steps up.' },
+    { area:'Protection',    text:'Term life adequate for surviving-spouse needs; umbrella under-sized for current real-estate footprint.' },
+    { area:'Legacy',        text:'Existing revocable trust funded but missing pour-over from secondary residence.' },
+  ],
+  strat: [
+    { group:'Tax',        strategy:'Roth conversion ladder', rationale:'Convert in low-bracket window before 2027 step-up.', tool:'Fidelity IRA / NetBenefits' },
+    { group:'',           strategy:'Tax-loss harvest legacy taxable', rationale:'Offset planned RSU diversification sales.', tool:'Direct-indexed SMA' },
+    { group:'Allocation', strategy:'Diversify concentrated RSU position', rationale:'Reduce single-stock risk from 38% to <15%.', tool:'10b5-1 plan + structured exit' },
+    { group:'Protection', strategy:'Raise umbrella to $5M',    rationale:'Real-estate exposure exceeds current limits.', tool:'Chubb Masterpiece umbrella' },
+    { group:'Legacy',     strategy:'Update revocable trust',   rationale:'Pour-over for secondary residence missing.', tool:'Trust attorney engagement' },
+    { group:'',           strategy:'Beneficiary audit',         rationale:'401(k) and life policy beneficiaries out of date.', tool:'Fidelity + carrier portals' },
+  ],
+  timeline: [
+    { quarter:'Q2 2026', strategy:'Protection',  action:'Bind expanded umbrella policy.',                  owner:'Advisor' },
+    { quarter:'Q3 2026', strategy:'Tax',         action:'Execute first Roth conversion tranche.',           owner:'Advisor + CPA' },
+    { quarter:'Q4 2026', strategy:'Allocation',  action:'File 10b5-1 plan for 2027 RSU diversification.',   owner:'Client + Advisor' },
+    { quarter:'Q1 2027', strategy:'Tax',         action:'Second Roth tranche; TLH coordinated.',            owner:'Advisor + CPA' },
+    { quarter:'Q2 2027', strategy:'Allocation',  action:'Begin scheduled RSU diversification trades.',       owner:'Advisor' },
+    { quarter:'Q3 2027', strategy:'Legacy',      action:'Execute trust amendment; refresh beneficiaries.',   owner:'Attorney + Client' },
+    { quarter:'Q4 2027', strategy:'Review',      action:'Year-end check: bracket, allocation, coverage.',    owner:'Advisor' },
+  ],
+};
+
+/* ============================================================
+   Render — bind state into the preview DOM.
+   ============================================================ */
+function renderIdent() {
+  document.querySelectorAll('[data-out]').forEach(el => {
+    const path = el.dataset.out.split('.');
+    let v = state;
+    for (const p of path) v = v?.[p];
+    el.textContent = v ?? '';
+  });
+}
+
+function renderObs() {
+  const root = document.getElementById('obs-table');
+  let html = `<div class="h">#</div><div class="h">Area</div><div class="h">Observation</div>`;
+  state.obs.forEach((r, i) => {
+    const last = i === state.obs.length - 1 ? ' row-last' : '';
+    html += `
+      <div class="c num${last}">${ROMAN[i] || ''}</div>
+      <div class="c${last}">${escapeHtml(r.area)}</div>
+      <div class="c${last}">${escapeHtml(r.text)}</div>`;
+  });
+  root.innerHTML = html;
+}
+
+function renderStrat() {
+  const root = document.getElementById('strat-table');
+  let html = `<div class="h">Group</div><div class="h">Strategy</div><div class="h">Rationale</div><div class="h">Tool / instrument</div>`;
+  state.strat.forEach(r => {
+    html += `
+      <div class="c group">${escapeHtml(r.group)}</div>
+      <div class="c">${escapeHtml(r.strategy)}</div>
+      <div class="c">${escapeHtml(r.rationale)}</div>
+      <div class="c">${escapeHtml(r.tool)}</div>`;
+  });
+  root.innerHTML = html;
+}
+
+function renderTimeline() {
+  const root = document.getElementById('timeline-table');
+  let html = `<div class="h">Quarter</div><div class="h">Strategy</div><div class="h">Action / milestone</div><div class="h">Owner</div>`;
+  state.timeline.forEach(r => {
+    html += `
+      <div class="c">${escapeHtml(r.quarter)}</div>
+      <div class="c">${escapeHtml(r.strategy)}</div>
+      <div class="c">${escapeHtml(r.action)}</div>
+      <div class="c">${escapeHtml(r.owner)}</div>`;
+  });
+  root.innerHTML = html;
+}
+
+function renderAll() {
+  renderIdent();
+  renderObs();
+  renderStrat();
+  renderTimeline();
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => (
+    { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]
+  ));
+}
+
+/* ============================================================
+   Build dynamic form rows for the three tables, wire inputs.
+   ============================================================ */
+function buildRow(parent, cls, fields, model, onChange) {
+  const div = document.createElement('div');
+  div.className = `tbl-row ${cls}`;
+  fields.forEach(([key, placeholder]) => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.value = model[key] || '';
+    input.addEventListener('input', () => { model[key] = input.value; onChange(); });
+    div.appendChild(input);
+  });
+  parent.appendChild(div);
+  return div;
+}
+
+function buildObsForm() {
+  const root = document.getElementById('obs-rows');
+  root.innerHTML = '';
+  state.obs.forEach((r) => {
+    buildRow(root, 'obs', [['area','Area'], ['text','Observation']], r, renderObs);
+  });
+}
+
+function buildStratForm() {
+  const root = document.getElementById('strat-rows');
+  root.innerHTML = '';
+  state.strat.forEach((r) => {
+    buildRow(root, 'strat',
+      [['group','Group'], ['strategy','Strategy'], ['rationale','Rationale'], ['tool','Tool / instrument']],
+      r, renderStrat);
+  });
+}
+
+function buildTimelineForm() {
+  const root = document.getElementById('timeline-rows');
+  root.innerHTML = '';
+  state.timeline.forEach((r) => {
+    buildRow(root, 'timeline',
+      [['quarter','Quarter'], ['strategy','Strategy'], ['action','Action / milestone'], ['owner','Owner']],
+      r, renderTimeline);
+  });
+}
+
+/* ============================================================
+   Wire identification / notes inputs (data-bind="p1.foo")
+   ============================================================ */
+function wireBoundInputs() {
+  document.querySelectorAll('[data-bind]').forEach(el => {
+    const path = el.dataset.bind.split('.');
+    const [section, key] = path;
+    el.value = state[section][key];
+    el.addEventListener('input', () => {
+      state[section][key] = el.value;
+      renderIdent();
+    });
+  });
+}
+
+/* ============================================================
+   Actions
+   ============================================================ */
+document.getElementById('btn-pdf').addEventListener('click', () => window.print());
+
+document.getElementById('btn-sample').addEventListener('click', () => {
+  Object.assign(state.shared, SAMPLE.shared);
+  Object.assign(state.p1, SAMPLE.p1);
+  Object.assign(state.p2, SAMPLE.p2);
+  Object.assign(state.p3, SAMPLE.p3);
+  state.obs       = SAMPLE.obs.map(r => ({...r}));
+  state.strat     = SAMPLE.strat.map(r => ({...r}));
+  state.timeline  = SAMPLE.timeline.map(r => ({...r}));
+  refreshAll();
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (!confirm('Clear all fields?')) return;
+  for (const k in state.shared) state.shared[k] = '';
+  for (const k in state.p1) state.p1[k] = '';
+  for (const k in state.p2) state.p2[k] = '';
+  for (const k in state.p3) state.p3[k] = '';
+  state.obs.forEach(r => { r.area = ''; r.text = ''; });
+  state.strat.forEach(r => {
+    r.group = ''; r.strategy = ''; r.rationale = ''; r.tool = '';
+  });
+  state.timeline.forEach((r, i) => {
+    r.quarter = QUARTERS_DEFAULT[i] || '';
+    r.strategy = ''; r.action = ''; r.owner = '';
+  });
+  refreshAll();
+});
+
+function refreshAll() {
+  buildObsForm(); buildStratForm(); buildTimelineForm();
+  wireBoundInputs();
+  renderAll();
+}
+
+/* Initial paint */
+refreshAll();
+</script>
+</body>
+</html>
