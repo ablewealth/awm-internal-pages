@@ -33,6 +33,9 @@
   .input-group input:focus, .input-group select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(59,130,246,0.12); }
   .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .input-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.check-row { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 4px; }
+.check-row label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); cursor: pointer; }
+.check-row input { width: auto; margin: 0; }
   .chart-wrap { position: relative; height: 300px; }
   .tab-bar { display: flex; gap: 2px; background: var(--border); border-radius: 7px; padding: 2px; margin-bottom: 12px; }
   .tab-btn { flex: 1; padding: 6px 10px; border: none; background: transparent; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; color: var(--muted); transition: all 0.15s; }
@@ -63,7 +66,15 @@
   .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
   .info-row:last-child { border-bottom: none; }
   .info-row .lbl { color: var(--muted); } .info-row .val { font-weight: 600; }
-  @media (max-width: 960px) { .grid-2 { grid-template-columns: 1fr; } .grid-4 { grid-template-columns: 1fr 1fr; } }
+  .grid-2 > * { min-width: 0; }
+  @media (max-width: 960px) { .grid-2 { grid-template-columns: minmax(0, 1fr); } .grid-4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) {
+    .container { padding: 12px; }
+    .input-row-3 { grid-template-columns: 1fr 1fr; }
+    .input-group { min-width: 0; }
+    .input-group label { white-space: normal; }
+    .card .comparison-grid { grid-template-columns: 1fr; }
+  }
 .toggle-switch { position:relative; display:inline-block; width:34px; height:18px; }
 .toggle-switch input { opacity:0; width:0; height:0; }
 .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#cbd5e1; transition:.3s; border-radius:18px; }
@@ -226,6 +237,10 @@
         <span class="note">How much less the owner can save vs. renter.</span>
       </div>
     </div>
+    <div class="input-group" style="margin-top:6px;"><label for="inPlannedCosts">Planned Costs (tuition and similar)</label><input type="text" id="inPlannedCosts" value="" maxlength="400" autocomplete="off" placeholder="2027: 30,000; 2028: 60,000">
+      <span class="note">Year: amount, separated by semicolons. Calendar years or model years (1, 2, 3). Paid from savings whether renting or owning.</span>
+    </div>
+    <p class="note" id="cashFlowNote" style="margin-top:6px;font-style:normal;font-size:10.5px;line-height:1.35;"></p>
   </div>
 
   <div class="card" style="margin-top: 12px;">
@@ -256,14 +271,17 @@
       <div class="input-group"><label>Floating Rate (%)</label><input type="number" id="inBoxRate" value="3.90" min="0" max="10" step="0.05">
       </div>
       <div class="input-group"><label>Mgmt Fee (%)</label><input type="number" id="inBoxFee" value="0.20" min="0" max="2" step="0.05">
-        <span class="note">All-in: 4.10%. Interest-only.</span>
+        <span class="note" id="inBoxAllIn">All-in: 4.10%. Interest-only.</span>
       </div>
     </div>
-    <div class="input-row">
+    <div class="input-row-3">
       <div class="input-group"><label>Collateral Portfolio ($)</label><input type="text" id="inCollateral" value="1,000,000">
         <span class="note">Schwab taxable acct. No liquidation needed.</span>
       </div>
       <div class="input-group"><label>Investment Return (%/yr)</label><input type="number" id="inInvestRet" value="7.0" min="0" max="20" step="0.5"></div>
+      <div class="input-group"><label>Max LTV (%)</label><input type="number" id="inMaxLTV" value="50" min="10" max="70" step="5">
+        <span class="note">Loan as a share of the pledged portfolio. Cash is added to the portfolio to stay under it.</span>
+      </div>
     </div>
     <div class="input-row-3" style="margin-top:8px;">
       <div class="input-group what-if"><label>Principal Paydown ($/yr)<span class="what-if-tag">WHAT-IF</span></label><input type="text" id="inBoxPrincipal" value="0">
@@ -272,11 +290,19 @@
       <div class="input-group what-if"><label>Start Paydown in Year</label><input type="number" id="inBoxPaydownStart" value="1" min="1" max="30" step="1">
         <span class="note">Year to begin principal payments.</span>
       </div>
-      <div class="input-group"><label>Portfolio Yield (%)</label><input type="number" id="inPortYield" value="2.5" min="0" max="15" step="0.25">
-        <span class="note">Div + int + ST gains on collateral. Sets §163(d) limit.</span>
+      <div class="input-group"><label id="lblPortYield" for="inPortYield">Realized Gains (% of portfolio)</label><input type="number" id="inPortYield" value="2.5" min="0" max="15" step="0.25">
+        <span class="note" id="notePortYield">Net capital gains realized each year. Caps the usable box spread loss (plus $3,000).</span>
       </div>
     </div>
-    <p class="note">Securities-backed loan: interest-only payments, no maturity date, no closing costs. Investment interest expense deductible up to net investment income (IRC §163(d)). Avoids triggering capital gains on stock sales.</p>
+    <div class="input-group" style="margin-top:8px;"><label for="inBoxTax">Tax Treatment of Loan Cost</label>
+      <select id="inBoxTax">
+        <option value="capital" selected>Capital loss: box spread (Section 1256, 60/40)</option>
+        <option value="interest">Investment interest (Section 163(d))</option>
+        <option value="none">No deduction</option>
+      </select>
+      <span class="note">A box spread's cost is generally reported as a capital loss. Interest on a margin loan or credit line used to buy a home is personal interest and not deductible; the Section 163(d) option applies only when the borrowed money is traced to investments.</span>
+    </div>
+    <p class="note">Securities-backed loan: interest-only payments, no maturity date, no closing costs. Avoids triggering capital gains on stock sales. Confirm the tax treatment with the client's CPA.</p>
     </div>
     <div id="noBoxNote" style="display:none;padding:8px 0;">
       <p class="note" style="color:var(--amber);font-weight:600;">Securities loan disabled. Down payment funded from Settlement Cash → HYS → Liquidate Collateral Portfolio (triggers capital gains).</p>
@@ -298,15 +324,15 @@
       <div class="input-group"><label>Federal Marginal (%)</label><input type="number" id="inFedRate" value="37" min="0" max="50" step="1">
         <span class="note">OBBBA made TCJA rates permanent.</span>
       </div>
-      <div class="input-group"><label>CA State Rate (%)</label><input type="number" id="inCARate" value="13.3" min="0" max="15" step="0.1">
-        <span class="note">12.3% + 1% Mental Health surtax.</span>
+      <div class="input-group"><label>CA State Rate (%)</label><input type="number" id="inCARate" value="11.3" min="0" max="15" step="0.1">
+        <span class="note">2026 MFJ taxable income: 9.3% to $768K, 10.3% to $922K, 11.3% to $1.54M, 12.3% above. Add 1% over $1M.</span>
       </div>
       <div class="input-group"><label>Household MAGI ($)</label><input type="text" id="inMAGI" value="1,000,000">
-        <span class="note">Drives SALT cap phaseout.</span>
+        <span class="note">Drives the SALT phaseout, the 37% bracket test and the CA itemized limitation.</span>
       </div>
     </div>
     <div class="input-row-3">
-      <div class="input-group"><label>SALT Base Cap ($)</label><input type="text" id="inSALT" value="40,400">
+      <div class="input-group"><label>SALT Base Cap, 2026 ($)</label><input type="text" id="inSALT" value="40,400">
         <span class="note">OBBBA: $40,400 MFJ for 2026.</span>
       </div>
       <div class="input-group"><label>Est. CA Income Tax ($)</label><input type="text" id="inCAIncomeTax" value="85,000">
@@ -316,16 +342,19 @@
         <span class="note">20% LTCG + 3.8% NIIT.</span>
       </div>
     </div>
-    <div class="input-row">
+    <div class="input-row-3">
       <div class="input-group"><label>Fed Std Deduction ($)</label><input type="text" id="inFedStdDed" value="32,200">
-        <span class="note">2026 MFJ per IRS Rev. Proc.</span>
+        <span class="note">2026 MFJ per IRS Rev. Proc. 2025-32.</span>
       </div>
-      <div class="input-group"><label>CA Std Deduction ($)</label><input type="text" id="inCAStdDed" value="11,780">
-        <span class="note">2026 MFJ estimate (3.2% adj).</span>
+      <div class="input-group"><label>CA Std Deduction ($)</label><input type="text" id="inCAStdDed" value="11,800">
+        <span class="note">2026 MFJ per FTB.</span>
+      </div>
+      <div class="input-group"><label>First Tax Year</label><input type="number" id="inTaxYear" value="2026" min="2025" max="2045" step="1">
+        <span class="note">Year 1 of the projection. Sets when the SALT cap drops to $10K (2030).</span>
       </div>
     </div>
-    <p class="note"><strong>OBBBA SALT rules (2025-2029):</strong> Base cap $40,400 MFJ. For MAGI &gt; $500K, cap reduces by $0.30 per $1 of excess (floor $10K). At MAGI $601K+, effective cap = $10K. SALT includes state income tax + property tax. Reverts to $10K cap in 2030.</p>
-    <p class="note">CA taxes capital gains as ordinary income (13.3%). Primary residence exclusion: $500K MFJ. $750K mortgage interest cap made permanent by OBBBA.</p>
+    <p class="note"><strong>Federal:</strong> SALT cap $40,400 MFJ for 2026, rising 1% a year through 2029, then $10,000. Above $505,000 of MAGI (2026) the cap falls 30 cents per dollar to a $10,000 floor, reached near $606,000. Mortgage interest counts on the first $750,000 of debt. In the 37% bracket each dollar of itemized deductions saves 35 cents (IRC §68). Home sale exclusion: $500,000 MFJ.</p>
+    <p class="note"><strong>California:</strong> no deduction for state income tax and no SALT cap on property tax. Mortgage interest counts on the first $1,000,000 of debt. Above $521,561 of federal AGI (2026 MFJ) itemized deductions are cut by 6% of the excess, up to 80%. Capital gains are taxed as ordinary income. All figures are married filing jointly.</p>
   </div>
 
   <div class="card" style="margin-top: 12px;">
@@ -344,7 +373,11 @@
     <div class="input-group"><label>Projection Horizon (years)</label><input type="number" id="inHorizon" value="15" min="1" max="30" step="1">
       <span class="note">Years until you expect to sell or reassess.</span>
     </div>
-    <p class="note"><strong>Measure ULA:</strong> the 2026 threshold is $5.4M. If the home value is above the threshold at the time of sale, the 4% ULA surcharge is modeled at exit.</p>
+    <div class="check-row">
+      <label><input type="checkbox" id="inCityLA" checked> Home is in the City of Los Angeles (Measure ULA applies)</label>
+      <label><input type="checkbox" id="inBuyerPaysTransfer"> Buyer pays the transfer tax at purchase</label>
+    </div>
+    <p class="note"><strong>Transfer tax:</strong> in Los Angeles the seller customarily pays it, so it is charged at sale and, unless the box is ticked, not at purchase. <strong>Measure ULA:</strong> from July 1, 2026 the surcharge is 4% of the whole price above $5.4M and 5.5% above $10.9M. The thresholds are indexed each year. It is modeled at sale.</p>
   </div>
 
   <div class="card" style="margin-top: 12px;">
@@ -460,6 +493,58 @@ var summaryTone = 'client';
 
 
 // ═══════════════════════════════════════════════════
+// TAX FIGURES — married filing jointly. Review once a year (see README).
+// Federal: IRC §68, §121, §163(d), §163(h)(3), §164(b)(6)-(7), §1211(b), §1256; Rev. Proc. 2025-32.
+// California: Rev. & Tax. Code §17043, §17077, §17220, §17225, §18151; FTB 2026 indexing.
+// Los Angeles: Measure ULA thresholds effective July 1, 2026.
+// ═══════════════════════════════════════════════════
+var TAX = {
+  baseYear: 2026,              // the dollar figures below are for this tax year
+  indexRate: 0.02,             // assumed yearly indexing of thresholds, standard deductions and income
+  saltThreshold: 505000,       // MAGI where the SALT cap starts to phase down; rises 1% a year
+  saltPhaseRate: 0.30,
+  saltFloor: 10000,            // lowest the cap can go, and the cap itself from 2030
+  saltLastYear: 2029,
+  fedMortgageLimit: 750000,    // acquisition debt whose interest is deductible
+  fedTopBracketStart: 768700,  // taxable income where the 37% bracket starts
+  fedItemizedHaircut: 2 / 37,  // §68: itemized deductions save 35 cents per dollar in the 37% bracket
+  caMortgageLimit: 1000000,    // California kept the pre-2018 limit
+  caItemizedThreshold: 521561, // federal AGI where California cuts itemized deductions (2025 $504,411 indexed 3.4%)
+  caItemizedRate: 0.06,
+  caItemizedMaxCut: 0.80,
+  homeSaleExclusion: 500000,
+  capLossOrdinaryLimit: 3000,  // net capital loss usable against ordinary income each year
+  ulaTiers: [{ over: 10900000, rate: 0.055 }, { over: 5400000, rate: 0.04 }],
+  ulaIndexRate: 0.03           // assumed yearly indexing of the ULA thresholds
+};
+
+// SALT deduction cap for a tax year, after the income phase-down
+function saltCapFor(taxYear, cap2026, magi) {
+  if (taxYear > TAX.saltLastYear) return TAX.saltFloor;
+  var step = Math.pow(1.01, taxYear - TAX.baseYear);
+  var cap = cap2026 * step;
+  var threshold = TAX.saltThreshold * step;
+  if (magi > threshold) cap = Math.max(TAX.saltFloor, cap - (magi - threshold) * TAX.saltPhaseRate);
+  return cap;
+}
+
+// Share of mortgage interest that is deductible when the balance is above the debt limit
+function mortgageShare(limit, balance) { return balance > limit ? limit / balance : 1; }
+
+// "2027: 30,000; 2028: 60,000" → { modelYear: amount }. Calendar years are converted using the first tax year.
+function parsePlannedCosts(text, firstTaxYear) {
+  var out = {};
+  String(text || '').split(';').forEach(function(part) {
+    var m = /^\s*(\d{1,4})\s*:\s*\$?\s*([\d,]+(?:\.\d+)?)\s*$/.exec(part);
+    if (!m) return;
+    var yr = parseInt(m[1], 10);
+    if (yr >= 1900) yr = yr - firstTaxYear + 1;
+    if (yr >= 1) out[yr] = (out[yr] || 0) + pv(m[2]);
+  });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════
 // FINANCIAL MODEL — LA-SPECIFIC
 // opts: { useBox: bool, boxPrinPmt: number, boxPayStart: number }
 // ═══════════════════════════════════════════════════
@@ -521,30 +606,33 @@ function runModel(opts) {
   var caStdDed   = pv(el('inCAStdDed').value);
   var ltcgRate   = pv(el('inLTCGRate').value) / 100;
 
-  // OBBBA SALT cap phaseout: for MAGI > $500K, cap reduces by $0.30 per $1 excess, floor $10K
-  var saltPhaseoutStart = 500000;
-  var saltFloor = 10000;
-  var effectiveSALTCap = saltBaseCap;
-  if (magi > saltPhaseoutStart) {
-    var reduction = (magi - saltPhaseoutStart) * 0.30;
-    effectiveSALTCap = Math.max(saltFloor, saltBaseCap - reduction);
-  }
+  var firstTaxYear = parseInt(el('inTaxYear').value, 10) || TAX.baseYear;
+  var boxTaxMode = useBox ? el('inBoxTax').value : 'none';
+  var inCityLA = el('inCityLA').checked;
+  var buyerPaysTransfer = el('inBuyerPaysTransfer').checked;
+  var planned = parsePlannedCosts(el('inPlannedCosts').value, firstTaxYear);
+
+  // SALT cap in the first tax year (shown in the cost breakdown); later years are worked out in the loop
+  var effectiveSALTCap = saltCapFor(firstTaxYear, saltBaseCap, magi);
+  var saltCapUnphased = saltCapFor(firstTaxYear, saltBaseCap, 0);
   var closePct   = pv(el('inClosePct').value) / 100;
   var transferPct= pv(el('inTransferTax').value) / 100;
   var sellPct    = pv(el('inSellPct').value) / 100;
-  var horizon    = parseInt(el('inHorizon').value) || 17;
+  var horizon    = parseInt(el('inHorizon').value) || 15;
 
   // ── Upfront ──
   var downPayment = price * downPct;
   var closingCosts = price * closePct;
-  var purchaseTransferTax = price * transferPct;
+  // In Los Angeles the seller customarily pays the transfer tax, so the buyer pays it only when the box is ticked
+  var purchaseTransferTax = buyerPaysTransfer ? price * transferPct : 0;
   var totalUpfront = downPayment + closingCosts + purchaseTransferTax;
   if (useBox) { boxLoanAmt = totalUpfront; el('inBoxAmt').value = totalUpfront.toLocaleString('en-US', {maximumFractionDigits:0}); }
   var loanAmt = price - downPayment;
 
-  // ── Enforce 50% max LTV on securities-backed loan ──
+  // ── Enforce the max LTV on the securities-backed loan ──
+  var maxLTV = pv(el('inMaxLTV').value) / 100;
+  if (!(maxLTV > 0 && maxLTV <= 0.95)) maxLTV = 0.50;
   if (useBox) {
-    var maxLTV = 0.50;
     var requiredCollateral = boxLoanAmt / maxLTV;
     var collateralShortfall = Math.max(0, requiredCollateral - collateral);
     addToCollateralFromSettle = Math.min(settlement, collateralShortfall);
@@ -627,8 +715,8 @@ function runModel(opts) {
   var preRefiRate = mortRate;
   var preRefiPayment = monthlyPmt;
 
-  // Measure ULA threshold (2026: $5.4M, grows with CPI ~3%/yr)
-  var ulaThreshold = 5400000;
+  var capLossCarry = 0; // unused box spread capital loss, carried forward
+  var invIntCarry = 0;  // disallowed investment interest, carried forward
 
   for (var y = 1; y <= horizon; y++) {
     homeVal *= (1 + appr);
@@ -656,6 +744,7 @@ function runModel(opts) {
     }
 
     // Mortgage amortization
+    var mortBalStart = mortBal;
     var yrInterest = 0, yrPrincipal = 0;
     for (var m = 0; m < 12; m++) {
       if (mortBal <= 0) break;
@@ -682,31 +771,58 @@ function runModel(opts) {
 
     var grossOwnCost = annualMort + annualPropTax + annualIns + annualMaint + boxInt + boxPrinPaid;
 
-    // ═══ TAX BENEFIT — FEDERAL (OBBBA rules) ═══
-    // Mortgage interest deduction: limited to interest on first $750K of debt (permanent per OBBBA)
-    var fedMortIntDed = loanAmt <= 750000 ? yrInterest : yrInterest * (750000 / loanAmt);
-    // SALT deduction: property tax + state income tax, capped per OBBBA phaseout
-    // SALT includes both property tax AND state income tax
-    var totalSALT = annualPropTax + (caIncomeTax * Math.pow(1.02, y - 1)); // CA income tax grows ~2%/yr with income
-    var fedSALTDed = Math.min(totalSALT, effectiveSALTCap);
-    // Box spread interest: deductible as investment interest expense (IRC §163(d))
-    // Limited to net investment income = collateral portfolio value × portfolio yield
-    var netInvIncome = collateralVal * portYield;
-    var fedBoxDed = Math.min(boxInt, netInvIncome); // §163(d) limitation
-    var fedItemized = fedMortIntDed + fedSALTDed + fedBoxDed;
-    // Inflation-adjust standard deduction ~2%/yr
-    var adjFedStdDed = fedStdDed * Math.pow(1.02, y - 1);
-    var fedTaxBenefit = Math.max(0, fedItemized - adjFedStdDed) * fedRate;
+    // ═══ TAX BENEFIT ═══
+    // The benefit is the owner's tax bill compared with the same household renting.
+    // Thresholds and standard deductions are indexed from the TAX table; income is assumed to keep pace.
+    var idx = Math.pow(1 + TAX.indexRate, y - 1);
+    var taxYear = firstTaxYear + y - 1;
+    var magiY = magi * idx;
+    var stateIncomeTaxY = caIncomeTax * idx;
+    var avgMortBal = (mortBalStart + mortBal) / 2;
+    var gainsOrIncome = collateralVal * portYield; // yearly cap on the usable box spread loss or interest
 
-    // ═══ TAX BENEFIT — CALIFORNIA ═══
-    // CA allows mortgage interest (full amount, no $750K limit) + full property tax (no SALT cap)
-    // CA also allows investment interest expense deduction (conforms to IRC §163(d))
-    var caMortIntDed = yrInterest;
-    var caPropTaxDed = annualPropTax;
-    var caBoxDed = Math.min(boxInt, netInvIncome); // same §163(d) limit
-    var caItemized = caMortIntDed + caPropTaxDed + caBoxDed;
-    var adjCAStdDed = caStdDed * Math.pow(1.02, y - 1);
-    var caTaxBenefit = Math.max(0, caItemized - adjCAStdDed) * caRate;
+    // Financing cost of the securities-backed loan
+    var boxInvInt = 0, fedBoxBenefit = 0, caBoxBenefit = 0;
+    if (boxTaxMode === 'capital') {
+      // Box spread cost as a Section 1256 capital loss: offsets realized capital gains,
+      // then up to $3,000 of ordinary income; the rest carries forward.
+      var lossPool = boxInt + capLossCarry;
+      var lossVsGains = Math.min(lossPool, gainsOrIncome);
+      var lossVsOrdinary = Math.min(lossPool - lossVsGains, TAX.capLossOrdinaryLimit);
+      capLossCarry = lossPool - lossVsGains - lossVsOrdinary;
+      fedBoxBenefit = lossVsGains * ltcgRate + lossVsOrdinary * fedRate;
+      caBoxBenefit = (lossVsGains + lossVsOrdinary) * caRate; // California taxes capital gains as ordinary income
+    } else if (boxTaxMode === 'interest') {
+      // Investment interest (§163(d)): limited to net investment income; the rest carries forward
+      var intPool = boxInt + invIntCarry;
+      boxInvInt = Math.min(intPool, gainsOrIncome);
+      invIntCarry = intPool - boxInvInt;
+    }
+
+    // ── Federal ──
+    // Mortgage interest on the first $750K of acquisition debt, by average balance for the year
+    var fedMortIntDed = yrInterest * mortgageShare(TAX.fedMortgageLimit, avgMortBal);
+    // SALT: property tax plus state income tax, capped and phased down by income
+    var saltCapY = saltCapFor(taxYear, saltBaseCap, magiY);
+    var fedOwnerItemized = fedMortIntDed + Math.min(annualPropTax + stateIncomeTaxY, saltCapY) + boxInvInt;
+    var fedRenterItemized = Math.min(stateIncomeTaxY, saltCapY);
+    // §68: itemized deductions lose 2/37 of their value to the extent income sits in the 37% bracket
+    var fedTopExcess = Math.max(0, magiY - TAX.fedTopBracketStart * idx);
+    var adjFedStdDed = fedStdDed * idx;
+    var fedOwnerDed = Math.max(adjFedStdDed, fedOwnerItemized - TAX.fedItemizedHaircut * Math.min(fedOwnerItemized, fedTopExcess));
+    var fedRenterDed = Math.max(adjFedStdDed, fedRenterItemized - TAX.fedItemizedHaircut * Math.min(fedRenterItemized, fedTopExcess));
+    var fedTaxBenefit = Math.max(0, fedOwnerDed - fedRenterDed) * fedRate + fedBoxBenefit;
+
+    // ── California ──
+    // Mortgage interest on the first $1M of acquisition debt; property tax in full (no SALT cap).
+    // State income tax is not deductible, so the renter is assumed to take the standard deduction.
+    var caMortIntDed = yrInterest * mortgageShare(TAX.caMortgageLimit, avgMortBal);
+    var caLimited = caMortIntDed + annualPropTax;
+    // High-income limitation: cut by 6% of federal AGI over the threshold, at most 80%. Investment interest is exempt.
+    var caCut = Math.min(TAX.caItemizedMaxCut * caLimited, TAX.caItemizedRate * Math.max(0, magiY - TAX.caItemizedThreshold * idx));
+    var caItemized = caLimited - caCut + boxInvInt;
+    var adjCAStdDed = caStdDed * idx;
+    var caTaxBenefit = Math.max(0, caItemized - adjCAStdDed) * caRate + caBoxBenefit;
 
     var totalTaxBenefit = fedTaxBenefit + caTaxBenefit;
     var netOwnCost = grossOwnCost - totalTaxBenefit;
@@ -729,8 +845,10 @@ function runModel(opts) {
     var monthlyRent = annualRent / 12;
     var diff = monthlyOwn - monthlyRent;
 
-    // Current savings capacity grows with income (same for both scenarios)
-    var yrSavings = monthlySavings * Math.pow(1 + savingsGrowth, y - 1);
+    // Current savings capacity grows with income (same for both scenarios).
+    // Planned costs such as tuition come out of it whether renting or owning.
+    var plannedCost = planned[y] || 0;
+    var yrSavings = monthlySavings * Math.pow(1 + savingsGrowth, y - 1) - plannedCost / 12;
 
     // Renter: keeps full savings (already paying rent from income).
     // The owner's savings below are already reduced by the full cost differential, so the
@@ -768,16 +886,19 @@ function runModel(opts) {
     var sellCost = homeVal * sellPct;
     var exitTransfer = homeVal * transferPct;
 
-    // Measure ULA at exit: if home value > threshold, 4% surcharge
-    var ulaAtExit = 0;
-    var adjUlaThreshold = ulaThreshold * Math.pow(1.03, y); // CPI adjusted
-    if (homeVal > adjUlaThreshold) {
-      ulaAtExit = homeVal * 0.04;
+    // Measure ULA at exit (City of Los Angeles): 4% or 5.5% of the whole price above the indexed thresholds
+    var ulaRate = 0;
+    if (inCityLA) {
+      for (var t = 0; t < TAX.ulaTiers.length; t++) {
+        if (homeVal > TAX.ulaTiers[t].over * Math.pow(1 + TAX.ulaIndexRate, y)) { ulaRate = TAX.ulaTiers[t].rate; break; }
+      }
     }
+    var ulaAtExit = homeVal * ulaRate;
 
-    // Capital gains tax at exit
-    var totalGain = homeVal - price;
-    var taxableGain = Math.max(0, totalGain - 500000); // $500K MFJ exclusion
+    // Capital gains tax at exit. Selling costs and transfer taxes reduce the gain.
+    // Purchase closing costs are left out of basis, which slightly overstates the tax.
+    var totalGain = homeVal - sellCost - exitTransfer - ulaAtExit - price - purchaseTransferTax;
+    var taxableGain = Math.max(0, totalGain - TAX.homeSaleExclusion); // married filing jointly
     var fedCapGains = taxableGain * ltcgRate;
     var caCapGains = taxableGain * caRate; // CA taxes as ordinary income
     var totalCapGainsTax = fedCapGains + caCapGains;
@@ -804,7 +925,8 @@ function runModel(opts) {
       ownerNW: ownerNW, renterNW: renterNW, advantage: advantage,
       ownerInv: ownerInv, renterInv: renterInv,
       ownerMkt: ownerMkt, ownerHYS: ownerHYS, renterMkt: renterMkt, renterHYS: renterHYS,
-      sellCost: sellCost, exitTransfer: exitTransfer, ulaAtExit: ulaAtExit,
+      sellCost: sellCost, exitTransfer: exitTransfer, ulaAtExit: ulaAtExit, ulaRate: ulaRate,
+      taxYear: taxYear, saltCapY: saltCapY, plannedCost: plannedCost,
       totalCapGainsTax: totalCapGainsTax, taxableGain: taxableGain, totalGain: totalGain,
       netProceeds: netProceeds, boxBal: boxBal,
       renterMonthlySave: renterMonthlySave, ownerMonthlySave: ownerMonthlySave
@@ -825,7 +947,9 @@ function runModel(opts) {
     boxPrincipalPmt: boxPrincipalPmt, boxPaydownStart: boxPaydownStart,
     useBox: useBox, investRet: investRet,
     price: price, horizon: horizon,
-    effectiveSALTCap: effectiveSALTCap, saltBaseCap: saltBaseCap, magi: magi,
+    effectiveSALTCap: effectiveSALTCap, saltCapUnphased: saltCapUnphased, saltBaseCap: saltBaseCap, magi: magi,
+    maxLTV: maxLTV, boxTaxMode: boxTaxMode, firstTaxYear: firstTaxYear, inCityLA: inCityLA,
+    buyerPaysTransfer: buyerPaysTransfer,
     settlement: settlement, hys: hys,
     rentResetYear: rentResetYear, marketRent: marketRent, rent: rent,
     hysRate: hysRate,
@@ -845,13 +969,35 @@ function render() {
   var y1 = yrs[0];
 
   // Savings reinvestment display
-  var y1Diff = y1.monthlyOwn - y1.monthlyRent;
-  var whoSaves = y1Diff > 0 ? 'Renter' : 'Owner';
-  var absDiff = Math.abs(y1Diff);
   el('dispRenterSave').value = fmt(y1.renterMonthlySave) + '/mo → market';
   el('dispOwnerSave').value = y1.ownerMonthlySave >= 0 ? fmt(y1.ownerMonthlySave) + '/mo → market' : fmt(-y1.ownerMonthlySave) + '/mo shortfall ← investments';
   var savingsGap = y1.renterMonthlySave - y1.ownerMonthlySave;
   el('dispSavingsGap').value = fmt(Math.abs(savingsGap)) + '/mo (' + (savingsGap > 0 ? 'renter saves more' : 'owner saves more') + ')';
+
+  // Cash flow check: years in which savings do not cover housing plus planned costs
+  var shortYears = function(key) { return yrs.filter(function(r) { return r[key] < 0; }); };
+  var describeShort = function(list, key) {
+    if (!list.length) return 'none';
+    var worst = list.reduce(function(a, b) { return b[key] < a[key] ? b : a; });
+    var span = list.length === 1 ? 'year ' + list[0].year : list.length + ' years (first: year ' + list[0].year + ')';
+    return span + ', largest ' + fmt(-worst[key]) + '/mo in year ' + worst.year;
+  };
+  var plannedTotal = yrs.reduce(function(s, r) { return s + r.plannedCost; }, 0);
+  el('cashFlowNote').textContent =
+    (plannedTotal > 0 ? 'Planned costs in the projection: ' + fmt(plannedTotal) + '. ' : '') +
+    'Years short of cash (drawn from investments): owner ' + describeShort(shortYears('ownerMonthlySave'), 'ownerMonthlySave') +
+    '; renter ' + describeShort(shortYears('renterMonthlySave'), 'renterMonthlySave') + '.';
+
+  // Box spread tax treatment: label the cap input to match
+  var boxTaxLabels = {
+    capital: ['Realized Gains (% of portfolio)', 'Net capital gains realized each year. Caps the usable box spread loss (plus $3,000).'],
+    interest: ['Portfolio Yield (%)', 'Dividends, interest and short-term gains. Sets the §163(d) limit.'],
+    none: ['Portfolio Yield (%)', 'Not used when no deduction is modeled.']
+  };
+  var boxTaxLabel = boxTaxLabels[el('inBoxTax').value] || boxTaxLabels.capital;
+  el('lblPortYield').textContent = boxTaxLabel[0];
+  el('notePortYield').textContent = boxTaxLabel[1];
+  el('inBoxAllIn').textContent = 'All-in: ' + (pv(el('inBoxRate').value) + pv(el('inBoxFee').value)).toFixed(2) + '%. Interest-only.';
 
   // Top metrics
   el('topMetrics').innerHTML =
@@ -862,10 +1008,11 @@ function render() {
 
   // Funding
   var tu = m.totalUpfront;
+  var ltvPct = (m.maxLTV * 100).toFixed(0);
   var fundingHTML =
     '<div class="info-row"><span class="lbl">Down Payment (' + el('inDownPct').value + '%)</span><span class="val">' + fmt(m.downPayment) + '</span></div>' +
     '<div class="info-row"><span class="lbl">Closing Costs</span><span class="val">' + fmt(m.closingCosts) + '</span></div>' +
-    '<div class="info-row"><span class="lbl">LA Transfer Tax (purchase)</span><span class="val">' + fmt(m.purchaseTransferTax) + '</span></div>' +
+    '<div class="info-row"><span class="lbl">Transfer Tax (purchase)</span><span class="val">' + (m.buyerPaysTransfer ? fmt(m.purchaseTransferTax) : 'Paid by seller') + '</span></div>' +
     '<div class="info-row" style="font-weight:700;border-top:2px solid var(--navy);"><span class="lbl"><strong>Total Upfront</strong></span><span class="val">' + fmt(tu) + '</span></div>' +
     '<div class="funding-bar">';
 
@@ -887,13 +1034,13 @@ function render() {
         (m.addToCollateralFromSettle > 0 && m.addToCollateralFromHYS > 0 ? ' + ' : '') +
         (m.addToCollateralFromHYS > 0 ? fmtK(m.addToCollateralFromHYS) + ' from HYS' : '') +
         ')</span></span></div>' +
-        '<div class="info-row"><span class="lbl" style="font-size:0.85em;color:var(--text-light);">Required to meet 50% max LTV on ' + fmtK(m.boxLoanAmt) + ' loan</span><span class="val"></span></div>'
+        '<div class="info-row"><span class="lbl" style="font-size:0.85em;color:var(--text-light);">Required to meet ' + ltvPct + '% max LTV on ' + fmtK(m.boxLoanAmt) + ' loan</span><span class="val"></span></div>'
       : '') +
       '<div class="info-row"><span class="lbl">Monthly Loan Payment (IO)</span><span class="val">' + fmt(m.boxLoanAmt * m.boxRate / 12) + '</span></div>' +
       '<div class="info-row"><span class="lbl">Residual Settlement Cash</span><span class="val">' + fmtK(m.settlement - m.fromSettle) + '</span></div>' +
       '<div class="info-row"><span class="lbl">Residual HYS</span><span class="val">' + fmtK(m.hys - m.fromHYS) + '</span></div>' +
       (m.fundingGap > 0 ? '<div class="info-row" style="color:var(--red);"><span class="lbl"><strong>Funding Gap</strong></span><span class="val">' + fmtK(m.fundingGap) + '</span></div>' : '') +
-      '<p class="note">Securities-backed loan: interest-only, no maturity, no closing costs. Max 50% LTV required.' + (m.addToCollateral > 0 ? ' ' + fmtK(m.addToCollateral) + ' moved from cash to collateral portfolio to meet LTV requirement.' : '') + ' Avoids capital gains on Schwab portfolio.</p>';
+      '<p class="note">Securities-backed loan: interest-only, no maturity, no closing costs. Max ' + ltvPct + '% LTV required.' + (m.addToCollateral > 0 ? ' ' + fmtK(m.addToCollateral) + ' moved from cash to collateral portfolio to meet LTV requirement.' : '') + ' Avoids capital gains on Schwab portfolio.</p>';
   } else {
     fundingHTML +=
       (m.fromSettle > 0 ? '<div style="width:' + (m.fromSettle/tu*100).toFixed(1) + '%; background:var(--blue);">Settlement ' + fmtK(m.fromSettle) + '</div>' : '') +
@@ -924,7 +1071,7 @@ function render() {
     (m.useBox && y1.boxPrinPaid > 0 ? '<div class="info-row"><span class="lbl">Securities Loan Principal</span><span class="val">' + fmt(y1.boxPrinPaid) + '</span></div>' : '') +
     '<div class="info-row" style="border-top:1px solid var(--navy);"><span class="lbl"><strong>Gross Annual Cost</strong></span><span class="val"><strong>' + fmt(y1.grossOwnCost) + '</strong> (' + fmt(y1.grossOwnCost/12) + '/mo)</span></div>' +
     '<div class="info-row" style="color:var(--green);"><span class="lbl">Federal Tax Benefit (OBBBA)</span><span class="val">-' + fmt(y1.fedTaxBenefit) + '</span></div>' +
-    '<div class="info-row" style="font-size:10px;color:var(--muted);"><span class="lbl">&nbsp;&nbsp;Effective SALT Cap</span><span class="val">' + fmt(m.effectiveSALTCap) + (m.magi > 500000 ? ' (phased down from ' + fmtK(m.saltBaseCap) + ' at ' + fmtK(m.magi) + ' MAGI)' : '') + '</span></div>' +
+    '<div class="info-row" style="font-size:10px;color:var(--muted);"><span class="lbl">&nbsp;&nbsp;Effective SALT Cap</span><span class="val">' + fmt(m.effectiveSALTCap) + (m.effectiveSALTCap < m.saltCapUnphased ? ' (phased down from ' + fmtK(m.saltCapUnphased) + ' at ' + fmtK(m.magi) + ' MAGI)' : '') + '</span></div>' +
     '<div class="info-row" style="color:var(--green);"><span class="lbl">CA State Tax Benefit</span><span class="val">-' + fmt(y1.caTaxBenefit) + '</span></div>' +
     '<div class="info-row" style="border-top:2px solid var(--navy);font-weight:700;"><span class="lbl"><strong>Net Annual Cost</strong></span><span class="val"><strong>' + fmt(y1.netOwnCost) + '</strong> (' + fmt(y1.monthlyOwn) + '/mo)</span></div>' +
     '<div class="info-row"><span class="lbl">vs. Annual Rent</span><span class="val">' + fmt(y1.annualRent) + ' (' + fmt(y1.monthlyRent) + '/mo)</span></div>';
@@ -937,8 +1084,8 @@ function render() {
     '<div class="info-row"><span class="lbl">Gross Equity</span><span class="val">' + fmtK(last.equity) + '</span></div>' +
     '<div class="info-row"><span class="lbl">Agent Commissions (' + el('inSellPct').value + '%)</span><span class="val">-' + fmtK(last.sellCost) + '</span></div>' +
     '<div class="info-row"><span class="lbl">Transfer Tax on Sale</span><span class="val">-' + fmtK(last.exitTransfer) + '</span></div>' +
-    (last.ulaAtExit > 0 ? '<div class="info-row" style="color:var(--red);"><span class="lbl">Measure ULA Surcharge (4%)</span><span class="val">-' + fmtK(last.ulaAtExit) + '</span></div>' : '<div class="info-row"><span class="lbl">Measure ULA</span><span class="val" style="color:var(--green);">N/A (below threshold)</span></div>') +
-    '<div class="info-row"><span class="lbl">Total Gain</span><span class="val">' + fmtK(last.totalGain) + '</span></div>' +
+    (last.ulaAtExit > 0 ? '<div class="info-row" style="color:var(--red);"><span class="lbl">Measure ULA Surcharge (' + (last.ulaRate * 100) + '%)</span><span class="val">-' + fmtK(last.ulaAtExit) + '</span></div>' : '<div class="info-row"><span class="lbl">Measure ULA</span><span class="val" style="color:var(--green);">' + (m.inCityLA ? 'N/A (below threshold)' : 'N/A (outside City of LA)') + '</span></div>') +
+    '<div class="info-row"><span class="lbl">Gain after selling costs</span><span class="val">' + fmtK(last.totalGain) + '</span></div>' +
     '<div class="info-row"><span class="lbl">Less: $500K MFJ Exclusion</span><span class="val">Taxable: ' + fmtK(last.taxableGain) + '</span></div>' +
     '<div class="info-row"><span class="lbl">Capital Gains Tax (Fed+CA)</span><span class="val" style="color:var(--red);">-' + fmtK(last.totalCapGainsTax) + '</span></div>' +
     (m.useBox ? (last.boxBal > 0 ? '<div class="info-row"><span class="lbl">Securities Loan Payoff</span><span class="val">-' + fmtK(last.boxBal) + '</span></div>' : '<div class="info-row" style="color:var(--green);"><span class="lbl">Securities Loan</span><span class="val">Paid off</span></div>') : '') +
@@ -1092,7 +1239,7 @@ function renderComparison(currentModel) {
   h += '<div class="metric"><span>Interest Cost of Loan</span><span class="v delta-negative">-' + fmtK(boxTotalInt) + '</span></div>';
   var taxSaved = 0;
   boxResult.years.forEach(function(y, i) { taxSaved += y.totalTaxBenefit - noBoxResult.years[i].totalTaxBenefit; });
-  h += '<div class="metric"><span>Extra Tax Deductions</span><span class="v ' + (taxSaved >= 0 ? 'delta-positive' : 'delta-negative') + '">' + (taxSaved >= 0 ? '+' : '') + fmtK(taxSaved) + '</span></div>';
+  h += '<div class="metric"><span>Extra Tax Savings</span><span class="v ' + (taxSaved >= 0 ? 'delta-positive' : 'delta-negative') + '">' + (taxSaved >= 0 ? '+' : '') + fmtK(taxSaved) + '</span></div>';
   h += '</div>';
 
   h += '</div>'; // end comparison-grid
@@ -1385,7 +1532,9 @@ function generateSummary(m) {
       h += 'Total loan interest over ' + horizon + 'yr: ' + fmtK(totalBoxInt) + '. End balance: ' + fmtK(last.boxBal) + '.</p>';
       h += '<p>NW delta (box vs. no-box): ' + (nwDelta >= 0 ? '+' : '') + fmtK(nwDelta) + '. ';
       h += 'Liquidation tax avoided: ' + fmtK(liqTax) + '. ';
-      h += 'IRC §163(d) limitation: investment interest capped at net investment income (collateral × ' + (pv(el('inPortYield').value)) + '% yield). ';
+      h += (m.boxTaxMode === 'capital' ? 'Loan cost treated as a Section 1256 capital loss: usable against realized gains (collateral × ' + pv(el('inPortYield').value) + '%) plus $3,000 a year, remainder carried forward. '
+        : m.boxTaxMode === 'interest' ? 'IRC §163(d) limitation: investment interest capped at net investment income (collateral × ' + pv(el('inPortYield').value) + '% yield). '
+        : 'No deduction modeled for the loan cost. ');
       h += 'Effective SALT cap at ' + fmtK(m.magi) + ' MAGI: ' + fmtK(m.effectiveSALTCap) + ' (OBBBA phaseout applied).</p>';
     }
   }
@@ -1414,7 +1563,7 @@ function generateSummary(m) {
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
     h += '<div style="background:white;border-radius:6px;padding:8px 12px;"><div style="font-size:10px;color:#7c3aed;text-transform:uppercase;font-weight:600;letter-spacing:0.3px;">Portfolio Preservation</div><div style="font-size:18px;font-weight:700;color:#059669;">+' + fmtK(portfolioDelta) + '</div><div style="font-size:9px;color:#6b7280;">' + fmtK(boxLast2.collateralVal) + ' vs ' + fmtK(noBoxLast2.collateralVal) + ' (no-loan)</div></div>';
     h += '<div style="background:white;border-radius:6px;padding:8px 12px;"><div style="font-size:10px;color:#7c3aed;text-transform:uppercase;font-weight:600;letter-spacing:0.3px;">Capital Gains Tax Avoided</div><div style="font-size:18px;font-weight:700;color:#059669;">+' + fmtK(liqTaxAvoided) + '</div><div style="font-size:9px;color:#6b7280;">On ' + fmtK(liquidatedAmt) + ' liquidated at ' + (pv(el('inLTCGRate').value) + pv(el('inCARate').value)).toFixed(1) + '% combined rate</div></div>';
-    h += '<div style="background:white;border-radius:6px;padding:8px 12px;"><div style="font-size:10px;color:#7c3aed;text-transform:uppercase;font-weight:600;letter-spacing:0.3px;">Extra Tax Deductions</div><div style="font-size:18px;font-weight:700;color:' + (extraTaxBenefits >= 0 ? '#059669' : '#dc2626') + ';">' + (extraTaxBenefits >= 0 ? '+' : '') + fmtK(extraTaxBenefits) + '</div><div style="font-size:9px;color:#6b7280;">Investment interest expense deduction (§163(d))</div></div>';
+    h += '<div style="background:white;border-radius:6px;padding:8px 12px;"><div style="font-size:10px;color:#7c3aed;text-transform:uppercase;font-weight:600;letter-spacing:0.3px;">Extra Tax Savings</div><div style="font-size:18px;font-weight:700;color:' + (extraTaxBenefits >= 0 ? '#059669' : '#dc2626') + ';">' + (extraTaxBenefits >= 0 ? '+' : '') + fmtK(extraTaxBenefits) + '</div><div style="font-size:9px;color:#6b7280;">' + (m.boxTaxMode === 'capital' ? 'Loan cost as a capital loss (Section 1256)' : m.boxTaxMode === 'interest' ? 'Investment interest expense deduction (§163(d))' : 'No deduction modeled for the loan cost') + '</div></div>';
     h += '<div style="background:white;border-radius:6px;padding:8px 12px;"><div style="font-size:10px;color:#7c3aed;text-transform:uppercase;font-weight:600;letter-spacing:0.3px;">Cost of Strategy</div><div style="font-size:18px;font-weight:700;color:#dc2626;">-' + fmtK(totalBoxInterest) + '</div><div style="font-size:9px;color:#6b7280;">Total interest paid @ ' + (m.boxRate*100).toFixed(2) + '% over ' + horizon + ' yrs</div></div>';
     h += '</div>';
 
@@ -1506,13 +1655,17 @@ function generateSummary(m) {
     h += '<div class="section-heading">Key Assumptions</div>';
     h += '<div class="assumptions-list">';
     h += '<span>Prop 13: 2% max assessed increase</span>';
-    h += '<span>OBBBA SALT cap: ' + fmtK(m.saltBaseCap) + ' base, phaseout >$500K MAGI</span>';
+    h += '<span>SALT cap: ' + fmtK(m.saltBaseCap) + ' for 2026, +1%/yr, phaseout above $505K MAGI, $10K from 2030</span>';
     h += '<span>Eff. SALT cap: ' + fmtK(m.effectiveSALTCap) + ' @ ' + fmtK(m.magi) + ' MAGI</span>';
     h += '<span>MFJ cap gains exclusion: $500K</span>';
     h += '<span>Fed LTCG+NIIT: ' + (pv(el('inLTCGRate').value)) + '% / CA: ' + (pv(el('inCARate').value)) + '%</span>';
-    h += '<span>Measure ULA: 4% above $5.4M (CPI adj)</span>';
-    h += '<span>Mortgage int ded: capped at $750K debt</span>';
-    h += '<span>Std ded inflation: 2%/yr</span>';
+    h += '<span>Measure ULA: ' + (m.inCityLA ? '4% above $5.4M, 5.5% above $10.9M (indexed 3%/yr)' : 'not applied (outside City of LA)') + '</span>';
+    h += '<span>Mortgage interest: first $750K of debt federal, $1M California</span>';
+    h += '<span>37% bracket: itemized deductions save 35 cents per dollar (IRC §68)</span>';
+    h += '<span>CA itemized limitation: 6% of AGI over $521,561, up to 80%</span>';
+    h += '<span>Thresholds, standard deductions and income indexed 2%/yr from ' + m.firstTaxYear + '</span>';
+    h += '<span>Transfer tax at purchase: ' + (m.buyerPaysTransfer ? 'buyer' : 'seller') + '</span>';
+    if (m.useBox) h += '<span>Securities loan: max ' + (m.maxLTV * 100).toFixed(0) + '% LTV; cost ' + (m.boxTaxMode === 'capital' ? 'as Section 1256 capital loss' : m.boxTaxMode === 'interest' ? 'as investment interest' : 'not deducted') + '</span>';
     h += '<span>Ongoing savings: ' + fmt(m.monthlySavings) + '/mo (' + (m.savingsGrowth*100).toFixed(1) + '%/yr growth)</span>';
     h += '<span>Reinvestment rate: ' + (m.reinvestRate*100).toFixed(0) + '% (only when owning costs less)</span>';
     h += '</div>';
@@ -1657,11 +1810,19 @@ function collectInputs() {
   return o;
 }
 // Returns { applied, ignored }. Values that are not plain numbers are left out.
-function applyInputs(inputs) {
-  var applied = 0, known = {};
+// With resetOthers, inputs the source does not mention go back to the page defaults,
+// so a file saved before an input existed always loads the same way.
+function applyInputs(inputs, resetOthers) {
+  var applied = 0, reset = 0, known = {};
   scFields().forEach(function(n) {
     known[n.id] = true;
-    if (!Object.prototype.hasOwnProperty.call(inputs, n.id)) return;
+    if (!Object.prototype.hasOwnProperty.call(inputs, n.id)) {
+      if (resetOthers) {
+        if (n.type === 'checkbox') n.checked = scDefaults[n.id]; else n.value = scDefaults[n.id];
+        reset++;
+      }
+      return;
+    }
     var v = inputs[n.id];
     if (n.type === 'checkbox') {
       if (v !== true && v !== false) return;
@@ -1672,6 +1833,9 @@ function applyInputs(inputs) {
     if (n.tagName === 'SELECT') {
       var ok = Array.prototype.some.call(n.options, function(op) { return op.value === v; });
       if (!ok) return;
+    } else if (n.id === 'inPlannedCosts') {
+      // free-form list of "year: amount" pairs; may be empty
+      if (v.length > 400 || !/^[\d\s:;,.$]*$/.test(v)) return;
     } else if (v === '' || v.length > 20 || !/^-?[\d,]*\.?\d*$/.test(v) || !/\d/.test(v)) {
       return;
     }
@@ -1680,7 +1844,7 @@ function applyInputs(inputs) {
   var ignored = Object.keys(inputs).filter(function(k) { return !known[k]; }).length;
   syncBoxUI();
   try { render(); } catch(e) { console.error('Render error:', e); }
-  return { applied: applied, ignored: ignored };
+  return { applied: applied, ignored: ignored, reset: reset };
 }
 // Page defaults come from the HTML itself, so a browser restoring form values on reload does not change them
 var scDefaults = (function() {
@@ -1699,6 +1863,7 @@ var scDefaults = (function() {
 
 function scStatus(msg) { el('scStatus').textContent = msg; }
 function scCount(n) { return n + (n === 1 ? ' input' : ' inputs'); }
+function scResetNote(r) { return r.reset ? ' ' + scCount(r.reset) + ' not in it set to the page default.' : ''; }
 function scReadStore() {
   try {
     var o = JSON.parse(window.localStorage.getItem(SC_KEY) || '{}');
@@ -1741,9 +1906,9 @@ el('scSave').addEventListener('click', function() {
 el('scLoad').addEventListener('click', function() {
   var name = el('scList').value, entry = scReadStore()[name];
   if (!entry || !entry.inputs || typeof entry.inputs !== 'object') { scStatus('Nothing to load.'); return; }
-  var r = applyInputs(entry.inputs);
+  var r = applyInputs(entry.inputs, true);
   el('scName').value = name;
-  scStatus('Loaded "' + name + '" (' + scCount(r.applied) + ').');
+  scStatus('Loaded "' + name + '" (' + scCount(r.applied) + ').' + scResetNote(r));
 });
 el('scDelete').addEventListener('click', function() {
   var name = el('scList').value, store = scReadStore();
@@ -1781,9 +1946,9 @@ el('scFile').addEventListener('change', function() {
     if (!data || typeof data !== 'object' || data.tool !== SC_TOOL || !data.inputs || typeof data.inputs !== 'object' || Array.isArray(data.inputs)) {
       scStatus('That file is not a rent v buy scenario file.'); return;
     }
-    var r = applyInputs(data.inputs);
+    var r = applyInputs(data.inputs, true);
     if (typeof data.name === 'string') el('scName').value = data.name.slice(0, 80);
-    scStatus('Loaded ' + scCount(r.applied) + ' from ' + file.name + (r.ignored ? ' (' + r.ignored + ' unrecognized entries ignored).' : '.'));
+    scStatus('Loaded ' + scCount(r.applied) + ' from ' + file.name + (r.ignored ? ' (' + r.ignored + ' unrecognized entries ignored).' : '.') + scResetNote(r));
   };
   reader.readAsText(file);
 });
