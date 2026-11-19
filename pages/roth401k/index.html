@@ -5,7 +5,7 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>401(k) Tax Strategy Calculator — UHNW Planning Tool</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="../../assets/vendor/chart-4.4.1.umd.min.js"></script>
 <style>
 :root {
   --navy: #1a2744; --slate: #2d3e5c; --blue: #3b82f6; --green: #10b981;
@@ -254,23 +254,23 @@ tr.total-row td { border-top: 2px solid var(--navy); background: var(--light); }
           <option value="MN" data-rate="9.85">Minnesota (9.85%)</option>
           <option value="DC" data-rate="10.75">D.C. (10.75%)</option>
           <option value="VT" data-rate="8.75">Vermont (8.75%)</option>
-          <option value="IA" data-rate="8.53">Iowa (8.53%)</option>
+          <option value="IA" data-rate="3.8">Iowa (3.8%)</option>
           <option value="WI" data-rate="7.65">Wisconsin (7.65%)</option>
           <option value="ME" data-rate="7.15">Maine (7.15%)</option>
           <option value="CT" data-rate="6.99">Connecticut (6.99%)</option>
-          <option value="SC" data-rate="6.5">South Carolina (6.5%)</option>
-          <option value="MT" data-rate="5.9">Montana (5.9%)</option>
-          <option value="ID" data-rate="5.8">Idaho (5.8%)</option>
+          <option value="SC" data-rate="6.0">South Carolina (6.0%)</option>
+          <option value="MT" data-rate="5.65">Montana (5.65%)</option>
+          <option value="ID" data-rate="5.3">Idaho (5.3%)</option>
           <option value="VA" data-rate="5.75">Virginia (5.75%)</option>
-          <option value="GA" data-rate="5.39">Georgia (5.39%)</option>
-          <option value="MA" data-rate="5.0">Massachusetts (5.0%)</option>
+          <option value="GA" data-rate="5.19">Georgia (5.19%)</option>
+          <option value="MA" data-rate="9.0">Massachusetts (9.0%)</option>
           <option value="IL" data-rate="4.95">Illinois (4.95%)</option>
-          <option value="NC" data-rate="4.5">North Carolina (4.5%)</option>
+          <option value="NC" data-rate="3.99">North Carolina (3.99%)</option>
           <option value="CO" data-rate="4.4">Colorado (4.4%)</option>
           <option value="MI" data-rate="4.25">Michigan (4.25%)</option>
-          <option value="OH" data-rate="3.5">Ohio (3.5%)</option>
+          <option value="OH" data-rate="2.75">Ohio (2.75%)</option>
           <option value="PA" data-rate="3.07">Pennsylvania (3.07%)</option>
-          <option value="IN" data-rate="3.05">Indiana (3.05%)</option>
+          <option value="IN" data-rate="2.95">Indiana (2.95%)</option>
           <option value="AZ" data-rate="2.5">Arizona (2.5%)</option>
           <option value="TX" data-rate="0">Texas (0%)</option>
           <option value="FL" data-rate="0">Florida (0%)</option>
@@ -348,6 +348,10 @@ tr.total-row td { border-top: 2px solid var(--navy); background: var(--light); }
     <div class="toggle-row">
       <label class="toggle-switch"><input type="checkbox" id="toggleRelocate"><span class="toggle-slider"></span></label>
       <span class="toggle-label">Relocate to 0% State at Retirement</span>
+    </div>
+    <div class="toggle-row">
+      <label class="toggle-switch"><input type="checkbox" id="toggleRothCatchUp" checked><span class="toggle-slider"></span></label>
+      <span class="toggle-label">Catch-Up Must Be Roth <span class="info-icon" title="From 2026, age 50+ catch-up contributions must be Roth when prior-year wages from the employer were over $150,000. Turn off for the self-employed or wages under the limit.">i</span></span>
     </div>
   </div>
 
@@ -447,7 +451,7 @@ tr.total-row td { border-top: 2px solid var(--navy); background: var(--light); }
       <div class="accordion-content">
         <div class="methodology-item">
           <h4>1. Annual Loop & Catch-Ups</h4>
-          <p>The engine runs a year-by-year compounding simulation. It dynamically applies standard age 50+ catch-ups and the SECURE 2.0 "Super Catch-Up" limits for ages 60&ndash;63, inflating these limits annually if toggled.</p>
+          <p>The engine runs a year-by-year compounding simulation. It dynamically applies standard age 50+ catch-ups and the SECURE 2.0 "Super Catch-Up" limits for ages 60&ndash;63, inflating these limits annually if toggled. From 2026, catch-up contributions must be Roth when prior-year wages from the employer were over $150,000; with that toggle on, the catch-up part of every strategy goes in as Roth and earns no deduction.</p>
         </div>
         <div class="methodology-item">
           <h4>2. Bracket Straddling (The Tax Engine)</h4>
@@ -499,7 +503,7 @@ const BRACKETS = {
   ]
 };
 const STD_DED = { MFJ: 32200, Single: 16100 };
-const LTCG_THRESH = { MFJ: 613700, Single: 551350 };
+const LTCG_THRESH = { MFJ: 613700, Single: 545500 };
 const NIIT_THRESH = { MFJ: 250000, Single: 200000 };
 
 // ====== HELPERS ======
@@ -529,10 +533,15 @@ function stateRate() {
 function fmt(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
 function fmtPct(n) { return (n * 100).toFixed(1) + '%'; }
 function el(id) { return document.getElementById(id); }
+// Number from an input; the fallback is used only when the box is empty or not a number, so a typed 0 stays 0
+function num(id, fallback) { const v = parseFloat(el(id).value); return Number.isFinite(v) ? v : fallback; }
 
 // ====== SECURE 2.0 ======
 // SECURE 2.0 Super Catch-Up: ages 60-63 get the greater of $11,250 (2026 IRS limit) or standard catch-up
 const SUPER_CATCHUP_2026 = 11250;
+// From 2026, catch-up contributions must be Roth for anyone whose prior-year wages from the
+// employer were over $150,000 (IRC 414(v)(7), Notice 2025-67). Returns the catch-up part of a year's limit.
+function catchUpPart(age, limit, base) { return age >= 50 ? Math.max(limit - base, 0) : 0; }
 function annualLimit(age, base, catchUpAmt, superCatchUpAmt) {
   let limit = base;
   if (age >= 50) {
@@ -560,13 +569,14 @@ function calculate() {
   const retireInc = parseFloat(el('retireIncome').value) || 0;
   const curAge = parseInt(el('currentAge').value) || 42;
   const retAge = parseInt(el('retireAge').value) || 65;
-  const infl = (parseFloat(el('inflation').value) || 2.5) / 100;
-  const ret = (parseFloat(el('expReturn').value) || 7) / 100;
-  const drag = (parseFloat(el('taxDrag').value) || 1.5) / 100;
-  const rmdPen = (parseFloat(el('rmdPenalty').value) || 5) / 100;
+  const infl = num('inflation', 2.5) / 100;
+  const ret = num('expReturn', 7) / 100;
+  const drag = num('taxDrag', 1.5) / 100;
+  const rmdPen = num('rmdPenalty', 5) / 100;
   const reinvest = el('toggleReinvest').checked;
   const indexLim = el('toggleIndex').checked;
   const relocate = el('toggleRelocate').checked;
+  const rothCatchUp = el('toggleRothCatchUp').checked;
 
   const years = Math.max(retAge - curAge, 1);
   const sideRet = ret - drag;
@@ -581,8 +591,9 @@ function calculate() {
     for (let y = 0; y < years; y++) {
       const age = curAge + y;
       const inflF = indexLim ? Math.pow(1 + infl, y) : 1;
-      const lim = annualLimit(age, Math.round(baseContrib * inflF), Math.round(catchUp * inflF), Math.round(SUPER_CATCHUP_2026 * inflF));
-      b = b * (1 + ret) + lim;
+      const base = Math.round(baseContrib * inflF);
+      const lim = annualLimit(age, base, Math.round(catchUp * inflF), Math.round(SUPER_CATCHUP_2026 * inflF));
+      b = b * (1 + ret) + lim - (rothCatchUp ? catchUpPart(age, lim, base) : 0);
     }
     estGrossPreTax = b;
   }
@@ -596,6 +607,8 @@ function calculate() {
 
   // Year-by-year simulation
   let rBal = 0, pBal = 0, sBal = 0, sBasis = 0;
+  let pRothBal = 0;      // Roth catch-up money inside the pre-tax strategy
+  let y1Deferrable = 0;  // year 1 amount that can go in pre-tax
   let crBal = 0, cpBal = 0, csBal = 0, csBasis = 0;
   let ltSavings = 0, y1Save = 0;
   let ltSavingsCustom = 0, y1SaveCustom = 0;
@@ -611,18 +624,23 @@ function calculate() {
     const adjSuperCU = Math.round(SUPER_CATCHUP_2026 * inflF);
     const limit = annualLimit(age, adjBase, adjCU, adjSuperCU);
 
+    // Part of the limit that has to be Roth, and the part that may be pre-tax
+    const forcedRoth = rothCatchUp ? catchUpPart(age, limit, adjBase) : 0;
+    const deferrable = limit - forcedRoth;
+    if (y === 0) y1Deferrable = deferrable;
+
     // Tax savings for full pre-tax
     const txWithout = Math.max(income - STD_DED[filing], 0);
-    const txWith = Math.max(income - limit - STD_DED[filing], 0);
+    const txWith = Math.max(income - deferrable - STD_DED[filing], 0);
     const fedSav = calcTax(txWithout, filing) - calcTax(txWith, filing);
-    const stateSav = limit * sRate;
+    const stateSav = deferrable * sRate;
     const totalSav = fedSav + stateSav;
 
     if (y === 0) y1Save = totalSav;
     ltSavings += totalSav;
 
     // Track custom-mix savings for display
-    const cmPreTaxContrib = limit * allocPreTax;
+    const cmPreTaxContrib = deferrable * allocPreTax;
     const cmTxWith = Math.max(income - cmPreTaxContrib - STD_DED[filing], 0);
     const cmFedSav = calcTax(txWithout, filing) - calcTax(cmTxWith, filing);
     const cmTotalSav = cmFedSav + cmPreTaxContrib * sRate;
@@ -631,12 +649,13 @@ function calculate() {
 
     // Grow: end-of-year contribution model (existing balance grows, then add new contribution)
     rBal = rBal * (1 + ret) + limit;
-    pBal = pBal * (1 + ret) + limit;
+    pBal = pBal * (1 + ret) + deferrable;
+    pRothBal = pRothBal * (1 + ret) + forcedRoth;
     if (reinvest) { sBasis += totalSav; sBal = sBal * (1 + sideRet) + totalSav; }
 
     // Custom mix
-    const crC = limit * allocRoth;
-    const cpC = limit * allocPreTax;
+    const cpC = deferrable * allocPreTax;
+    const crC = limit - cpC;
     const cTxWith = Math.max(income - cpC - STD_DED[filing], 0);
     const cFedSav = calcTax(txWithout, filing) - calcTax(cTxWith, filing);
     const cTotalSav = cFedSav + cpC * sRate;
@@ -649,7 +668,7 @@ function calculate() {
     const pNet401k = pBal * (1 - effFutureRate);
     const sGain = Math.max(sBal - sBasis, 0);
     const sNet = sBal - sGain * liqRate;
-    const pTotalNet = pNet401k + sNet;
+    const pTotalNet = pNet401k + pRothBal + sNet;
     const cpNet = cpBal * (1 - effFutureRate);
     const csGain = Math.max(csBal - csBasis, 0);
     const csNet = csBal - csGain * liqRate;
@@ -676,7 +695,7 @@ function calculate() {
   const fSGain = Math.max(sBal - sBasis, 0);
   const fSTax = fSGain * liqRate;
   const fSNet = sBal - fSTax;
-  const fPTotal = fPNet + fSNet;
+  const fPTotal = fPNet + pRothBal + fSNet;
   const fCRoth = crBal;
   const fCPNet = cpBal * (1 - effFutureRate);
   const fCSGain = Math.max(csBal - csBasis, 0);
@@ -684,8 +703,7 @@ function calculate() {
   const fCSNet = csBal - fCSTax;
   const fCTotal = fCRoth + fCPNet + fCSNet;
   const deflator = Math.pow(1 + infl, years);
-  const fullContrib = baseContrib + (curAge >= 50 ? catchUp : 0);
-  const blendedRate = fullContrib > 0 ? y1Save / fullContrib : 0;
+  const blendedRate = y1Deferrable > 0 ? y1Save / y1Deferrable : 0;
 
   // ====== UPDATE UI ======
 
@@ -761,7 +779,8 @@ function calculate() {
     <tr><td><strong>Roth 401(k)</strong></td><td>${fmt(fRoth)}</td><td>${fmt(fRoth)}</td><td>$0</td><td>0%</td><td>$0</td><td>${fmt(fRoth)}</td></tr>
     <tr><td><strong>Pre-Tax 401(k)</strong></td><td>${fmt(fPGross)}</td><td>$0</td><td>${fmt(fPGross)}</td><td>${fmtPct(effFutureRate)}</td><td>${fmt(pTaxOwed)}</td><td>${fmt(fPNet)}</td></tr>
     <tr><td><strong>Side-Fund (Taxable)</strong></td><td>${fmt(fSGross)}</td><td>${fmt(sBasis)}</td><td>${fmt(fSGain)}</td><td>${fmtPct(liqRate)}</td><td>${fmt(fSTax)}</td><td>${fmt(fSNet)}</td></tr>
-    <tr class="total-row"><td>Total Pre-Tax Strategy</td><td>${fmt(fPGross + fSGross)}</td><td>${fmt(sBasis)}</td><td>${fmt(fPGross + fSGain)}</td><td>&mdash;</td><td>${fmt(pTaxOwed + fSTax)}</td><td>${fmt(fPTotal)}</td></tr>
+    ${pRothBal > 0 ? `<tr><td><strong>Roth Catch-Up (required)</strong></td><td>${fmt(pRothBal)}</td><td>${fmt(pRothBal)}</td><td>$0</td><td>0%</td><td>$0</td><td>${fmt(pRothBal)}</td></tr>` : ''}
+    <tr class="total-row"><td>Total Pre-Tax Strategy</td><td>${fmt(fPGross + pRothBal + fSGross)}</td><td>${fmt(sBasis + pRothBal)}</td><td>${fmt(fPGross + fSGain)}</td><td>&mdash;</td><td>${fmt(pTaxOwed + fSTax)}</td><td>${fmt(fPTotal)}</td></tr>
     <tr><td><strong>Custom Roth Portion</strong></td><td>${fmt(fCRoth)}</td><td>${fmt(fCRoth)}</td><td>$0</td><td>0%</td><td>$0</td><td>${fmt(fCRoth)}</td></tr>
     <tr><td><strong>Custom Pre-Tax Portion</strong></td><td>${fmt(cpBal)}</td><td>$0</td><td>${fmt(cpBal)}</td><td>${fmtPct(effFutureRate)}</td><td>${fmt(cpBal * effFutureRate)}</td><td>${fmt(fCPNet)}</td></tr>
     <tr><td><strong>Custom Side-Fund</strong></td><td>${fmt(csBal)}</td><td>${fmt(csBasis)}</td><td>${fmt(fCSGain)}</td><td>${fmtPct(liqRate)}</td><td>${fmt(fCSTax)}</td><td>${fmt(fCSNet)}</td></tr>
@@ -775,7 +794,7 @@ function calculate() {
   window._rows = rows;
   window._cfg = { baseContrib, catchUp, allocRoth: rothPctDisp, filing, stateRate: (sRate*100).toFixed(1),
     income, retireInc, curAge, retAge, inflation: (infl*100).toFixed(1), ret: (ret*100).toFixed(1),
-    drag: (drag*100).toFixed(1), rmdPen: (rmdPen*100).toFixed(1), reinvest, indexLim, relocate };
+    drag: (drag*100).toFixed(1), rmdPen: (rmdPen*100).toFixed(1), reinvest, indexLim, relocate, rothCatchUp };
 }
 
 // ====== CHART ======
@@ -850,7 +869,7 @@ function exportCSV() {
   csv += `State Tax Rate,${c.stateRate}%\nCurrent Age,${c.curAge}\nRetirement Age,${c.retAge}\n`;
   csv += `Expected Return,${c.ret}%\nTax Drag,${c.drag}%\nRMD Penalty,${c.rmdPen}%\n`;
   csv += `Inflation,${c.inflation}%\nRoth Allocation,${c.allocRoth}%\n`;
-  csv += `Reinvest Tax Savings,${c.reinvest}\nIndex IRS Limits,${c.indexLim}\nRelocate to 0% State,${c.relocate}\n\n`;
+  csv += `Reinvest Tax Savings,${c.reinvest}\nIndex IRS Limits,${c.indexLim}\nRelocate to 0% State,${c.relocate}\nCatch-Up Must Be Roth,${c.rothCatchUp}\n\n`;
   csv += 'YEAR-BY-YEAR DATA\nYear,Age,Contribution,Roth Balance,PreTax Balance,Side Fund,Tax Savings,Roth Net,PreTax Net,Custom Net\n';
   for (const r of window._rows) {
     csv += [r.year,r.age,r.contribution,r.rothBal,r.preTaxBal,r.sideBal,r.taxSav,r.rothNet,r.preTaxNet,r.customNet].join(',') + '\n';
