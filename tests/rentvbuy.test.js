@@ -23,15 +23,15 @@ test('page defaults: headline results', () => {
   const m = run(), y1 = m.years[0], L = last(m);
   assert.strictEqual(m.years.length, 15);
   near(m.totalUpfront, 412000);
-  near(y1.monthlyOwn, 14709);
+  near(y1.monthlyOwn, 15640);
   near(y1.monthlyRent, 8000);
-  near(y1.ownerMonthlySave, 3291);
-  near(y1.fedTaxBenefit, 11365);
-  near(y1.caTaxBenefit, 6826);
-  near(sum(m, 'fedTaxBenefit'), 143272, 2);
-  near(sum(m, 'caTaxBenefit'), 98185, 2);
+  near(y1.ownerMonthlySave, 2360);
+  near(y1.fedTaxBenefit, 14646);
+  near(y1.caTaxBenefit, 8239);
+  near(sum(m, 'fedTaxBenefit'), 192504, 2);
+  near(sum(m, 'caTaxBenefit'), 119378, 2);
   near(L.taxableGain, 630892);
-  near(L.advantage, -501219, 2);
+  near(L.advantage, -840785, 2);
 });
 
 test('every yearly figure is a finite number across varied scenarios', () => {
@@ -183,11 +183,11 @@ test('Measure ULA: 4% and 5.5% tiers on the whole price, City of Los Angeles onl
 // ── Maximum purchase price ──
 test('max price with no savings kept and flat insurance: cash flow binds before funding', () => {
   const r = maxPrice();
-  assert.strictEqual(r.cashFlow, 2465000);
+  assert.strictEqual(r.cashFlow, 2305000);
   assert.strictEqual(r.funding, 4245000);
-  assert.strictEqual(r.max, 2465000);
+  assert.strictEqual(r.max, 2305000);
   assert.strictEqual(r.binding, 'cashFlow');
-  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1685000 });
+  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1540000 });
 });
 test('the max price passes both limits and the next $5,000 does not', () => {
   const r = maxPrice();
@@ -205,9 +205,9 @@ test('max price at the card defaults: keep 20% of savings, insurance scaled with
   assert.strictEqual(Number(defaults.inOptKeepPct.value), 20);
   assert.strictEqual(defaults.inOptScaleIns.checked, true);
   const r = maxPrice({}, { keepPct: 0.2, scaleInsurance: true });
-  assert.strictEqual(r.max, 2165000);
+  assert.strictEqual(r.max, 2040000);
   assert.strictEqual(r.binding, 'cashFlow');
-  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1735000 });
+  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1605000 });
 });
 test('keeping a share of savings and a cash reserve each lower their limit', () => {
   const base = maxPrice(), tight = maxPrice({}, { keepPct: 0.3, reserve: 300000 });
@@ -272,6 +272,7 @@ test('page defaults match the tax table year', () => {
   assert.strictEqual(defaults.inSALT.value, '40,400');
   assert.strictEqual(defaults.inFedStdDed.value, '32,200');
   assert.strictEqual(defaults.inCAStdDed.value, '11,800');
+  assert.strictEqual(defaults.inMortRate.value, '7.25');   // 30-year jumbo rate, November 2026; update with the market
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
