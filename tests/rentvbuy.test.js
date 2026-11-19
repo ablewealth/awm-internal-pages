@@ -23,15 +23,15 @@ test('page defaults: headline results', () => {
   const m = run(), y1 = m.years[0], L = last(m);
   assert.strictEqual(m.years.length, 15);
   near(m.totalUpfront, 412000);
-  near(y1.monthlyOwn, 15640);
+  near(y1.monthlyOwn, 15619);
   near(y1.monthlyRent, 8000);
-  near(y1.ownerMonthlySave, 2360);
+  near(y1.ownerMonthlySave, 2381);
   near(y1.fedTaxBenefit, 14646);
-  near(y1.caTaxBenefit, 8239);
+  near(y1.caTaxBenefit, 8208);
   near(sum(m, 'fedTaxBenefit'), 192504, 2);
-  near(sum(m, 'caTaxBenefit'), 119378, 2);
+  near(sum(m, 'caTaxBenefit'), 118845, 2);
   near(L.taxableGain, 630892);
-  near(L.advantage, -840785, 2);
+  near(L.advantage, -895744, 2);
 });
 
 test('every yearly figure is a finite number across varied scenarios', () => {
@@ -157,6 +157,19 @@ test('max LTV sets how much cash moves into the pledged portfolio', () => {
   near(run({ inMaxLTV: 0 }).maxLTV, 0.50, 1e-9);             // nonsense falls back to 50%
 });
 
+// ── Property tax ──
+test('Prop 13: year 1 is taxed on the purchase price, then the assessed value rises 2% a year', () => {
+  const m = run();
+  near(m.years[0].assessed, 2000000, 0.01);
+  near(m.years[0].annualPropTax, (2000000 - 7000) * 0.0119, 0.01);   // $7,000 homeowner exemption
+  near(m.years[1].assessed, 2000000 * 1.02, 0.01);
+  near(m.years[9].assessed, 2000000 * Math.pow(1.02, 9), 0.01);
+});
+test('Prop 13: the assessed value never exceeds market value when prices fall', () => {
+  const m = run({ inAppreciation: -3 });
+  m.years.forEach(y => assert.ok(y.assessed <= y.homeVal + 0.01));
+});
+
 // ── Sale ──
 test('transfer tax at purchase is charged only when the buyer pays it', () => {
   near(run().purchaseTransferTax, 0, 0);
@@ -183,11 +196,11 @@ test('Measure ULA: 4% and 5.5% tiers on the whole price, City of Los Angeles onl
 // ── Maximum purchase price ──
 test('max price with no savings kept and flat insurance: cash flow binds before funding', () => {
   const r = maxPrice();
-  assert.strictEqual(r.cashFlow, 2305000);
+  assert.strictEqual(r.cashFlow, 2310000);
   assert.strictEqual(r.funding, 4245000);
-  assert.strictEqual(r.max, 2305000);
+  assert.strictEqual(r.max, 2310000);
   assert.strictEqual(r.binding, 'cashFlow');
-  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1540000 });
+  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1510000 });
 });
 test('the max price passes both limits and the next $5,000 does not', () => {
   const r = maxPrice();
@@ -205,9 +218,9 @@ test('max price at the card defaults: keep 20% of savings, insurance scaled with
   assert.strictEqual(Number(defaults.inOptKeepPct.value), 20);
   assert.strictEqual(defaults.inOptScaleIns.checked, true);
   const r = maxPrice({}, { keepPct: 0.2, scaleInsurance: true });
-  assert.strictEqual(r.max, 2040000);
+  assert.strictEqual(r.max, 2045000);
   assert.strictEqual(r.binding, 'cashFlow');
-  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1605000 });
+  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1585000 });
 });
 test('keeping a share of savings and a cash reserve each lower their limit', () => {
   const base = maxPrice(), tight = maxPrice({}, { keepPct: 0.3, reserve: 300000 });

@@ -181,7 +181,7 @@
       <div class="input-group what-if"><label>Refinance in Year<span class="what-if-tag">WHAT-IF</span></label><input type="number" id="inRefiYear" value="0" min="0" max="30" step="1">
         <span class="note">0 = no refi. Set to year you expect to refinance.</span>
       </div>
-      <div class="input-group what-if"><label>Refi Rate (%)</label><input type="number" id="inRefiRate" value="5.0" min="0" max="15" step="0.125">
+      <div class="input-group what-if"><label>Refi Rate (%)</label><input type="number" id="inRefiRate" value="6.25" min="0" max="15" step="0.125">
         <span class="note">Expected rate at refinance. New 30-yr term.</span>
       </div>
       <div class="input-group what-if"><label>Refi Closing Cost (%)</label><input type="number" id="inRefiCost" value="0.5" min="0" max="5" step="0.1">
@@ -189,8 +189,8 @@
       </div>
     </div>
     <div class="input-row">
-      <div class="input-group"><label>Property Tax Rate (%)</label><input type="number" id="inPropTax" value="1.18" min="0" max="5" step="0.05">
-        <span class="note">LA County avg incl. bonds. Prop 13: 2% max annual increase.</span>
+      <div class="input-group"><label>Property Tax Rate (%)</label><input type="number" id="inPropTax" value="1.19" min="0" max="5" step="0.01">
+        <span class="note">City of LA median incl. bonds, before direct assessments. Prop 13: 2% max annual increase.</span>
       </div>
       <div class="input-group"><label>Annual Insurance ($)</label><input type="text" id="inInsurance" value="18,000">
         <span class="note">LA market post-wildfire crisis; verify quote.</span>
@@ -200,7 +200,7 @@
       <div class="input-group"><label>Maintenance (% of value/yr)</label><input type="number" id="inMaintPct" value="1.0" min="0" max="5" step="0.1"></div>
       <div class="input-group"><label>Home Appreciation (%/yr)</label><input type="number" id="inAppreciation" value="3.5" min="-5" max="15" step="0.25"></div>
     </div>
-    <div class="input-group"><label>Insurance Annual Increase (%)</label><input type="number" id="inInsIncrease" value="5.0" min="0" max="20" step="0.5">
+    <div class="input-group"><label>Insurance Annual Increase (%)</label><input type="number" id="inInsIncrease" value="6.5" min="0" max="20" step="0.5">
       <span class="note">CA market trending 5-8%/yr due to wildfire risk repricing.</span>
     </div>
   </div>
@@ -759,8 +759,9 @@ function runModel(opts) {
   for (var y = 1; y <= horizon; y++) {
     homeVal *= (1 + appr);
 
-    // Prop 13 assessed value: max 2% increase per year
-    assessed = Math.min(assessed * 1.02, homeVal);
+    // Prop 13: the purchase price is the assessed value for year 1; it can rise at most 2% a year after that,
+    // and never above market value
+    assessed = Math.min(y > 1 ? assessed * 1.02 : assessed, homeVal);
     var taxableAssessed = Math.max(0, assessed - homeownerExemption);
     var annualPropTax = taxableAssessed * propTaxR;
 
