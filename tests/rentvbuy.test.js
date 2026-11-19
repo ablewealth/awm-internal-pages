@@ -181,7 +181,7 @@ test('Measure ULA: 4% and 5.5% tiers on the whole price, City of Los Angeles onl
 });
 
 // ── Maximum purchase price ──
-test('max price at the page defaults: cash flow binds before funding', () => {
+test('max price with no savings kept and flat insurance: cash flow binds before funding', () => {
   const r = maxPrice();
   assert.strictEqual(r.cashFlow, 2465000);
   assert.strictEqual(r.funding, 4245000);
@@ -201,11 +201,37 @@ test('testing a price gives the same result as typing it into the page', () => {
   near(tested.advantage, typed.advantage, 0.001);
   near(checkPrice({}, 2465000).advantage, typed.advantage, 0.001);
 });
-test('a savings cushion and a cash reserve each lower their limit', () => {
-  const base = maxPrice(), tight = maxPrice({}, { cushion: 3000, reserve: 300000 });
+test('max price at the card defaults: keep 20% of savings, insurance scaled with price', () => {
+  assert.strictEqual(Number(defaults.inOptKeepPct.value), 20);
+  assert.strictEqual(defaults.inOptScaleIns.checked, true);
+  const r = maxPrice({}, { keepPct: 0.2, scaleInsurance: true });
+  assert.strictEqual(r.max, 2165000);
+  assert.strictEqual(r.binding, 'cashFlow');
+  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1735000 });
+});
+test('keeping a share of savings and a cash reserve each lower their limit', () => {
+  const base = maxPrice(), tight = maxPrice({}, { keepPct: 0.3, reserve: 300000 });
   assert.ok(tight.cashFlow < base.cashFlow);
   assert.ok(tight.funding < base.funding);
+  near(tight.atMax.worstRequired, 3000, 0.01);               // 30% of $10,000 a month in year 1
   assert.ok(tight.atMax.worstSave >= 3000 && tight.atMax.cashLeft >= 300000);
+});
+test('the share to keep is measured against savings before planned costs', () => {
+  const r = maxPrice({ inPlannedCosts: '2: 24,000' }, { keepPct: 0.2 });
+  assert.strictEqual(r.atMax.worstYear, 2);
+  near(r.atMax.worstRequired, 0.2 * 10000 * 1.03, 0.01);     // year 2 savings capacity is $10,300 a month
+});
+test('insurance scales in proportion to the tested price, and not at all when switched off', () => {
+  near(checkPrice({}, 3000000, { scaleInsurance: true }).insurance, 18000 * 1.5, 0.01);
+  near(checkPrice({}, 3000000, { scaleInsurance: false }).insurance, 18000, 0.01);
+  near(checkPrice({}, 2000000, { scaleInsurance: true }).insurance, 18000, 0.01);   // the entered price keeps the entered premium
+  assert.ok(maxPrice({}, { scaleInsurance: true }).max < maxPrice().max);
+});
+test('applying the max price with its scaled insurance gives the same max again', () => {
+  const lim = { keepPct: 0.2, scaleInsurance: true };
+  const r = maxPrice({}, lim);
+  const again = maxPrice({ inPrice: r.max.toLocaleString('en-US'), inInsurance: Math.round(r.atMax.insurance).toLocaleString('en-US') }, lim);
+  near(again.max, r.max, 5000);
 });
 test('planned costs lower the cash flow limit, and the tightest year moves to the costly year', () => {
   const r = maxPrice({ inPlannedCosts: '3: 60,000' });

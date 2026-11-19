@@ -51,10 +51,10 @@ Scenario files hold client figures. Keep them out of this repository.
 
 The Maximum Purchase Price card finds the highest price that passes two tests, with every other input as entered:
 
-- **Cash flow:** savings cover housing and planned costs in every year, with the chosen monthly cushion left over.
+- **Cash flow:** savings cover housing and planned costs in every year, with a chosen share of that year's savings left over (20% by default).
 - **Funding:** the down payment and closing costs can be funded with no gap, the loan stays within the max LTV, and the chosen cash reserve is left after closing.
 
-It also reports the price range where buying matches or beats renting at the horizon. Rent, insurance, the down payment percent and savings do not change with the price being tested. The search runs from $100,000 to $30,000,000 and rounds down to the nearest $5,000.
+It also reports the price range where buying matches or beats renting at the horizon. Rent, the down payment percent and savings do not change with the price being tested. Insurance moves in proportion to the price (the entered premium applies at the entered price) unless that box is unticked, and Use this price updates the insurance input to match. The search runs from $100,000 to $30,000,000 and rounds down to the nearest $5,000.
 
 ### Yearly tax update
 
@@ -86,7 +86,7 @@ After updating, change `TAX.baseYear` and the First Tax Year default together, t
 - AMT, and the extra $100,000 of home equity debt California allows.
 - Purchase closing costs are not added to basis at sale.
 - An unused box spread loss at the end of the projection is given no value.
-- Insurance is a dollar input and does not scale with the price, including inside the maximum price search.
+- Insurance is a dollar input. Changing the price by hand does not change it; only the maximum price search scales it.
 
 ## Tax-aware engine: rebuilding
 

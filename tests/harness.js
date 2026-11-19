@@ -52,6 +52,6 @@ module.exports = {
   TAX: base.TAX,
   helpers: { saltCapFor: base.saltCapFor, mortgageShare: base.mortgageShare, parsePlannedCosts: base.parsePlannedCosts },
   run: (overrides, opts) => build(overrides).runModel(opts || {}),
-  maxPrice: (overrides, limits) => build(overrides).findMaxPrice(Object.assign({ cushion: 0, reserve: 0 }, limits)),
-  checkPrice: (overrides, price, limits) => build(overrides).checkPrice(price, Object.assign({ cushion: 0, reserve: 0 }, limits)),
+  maxPrice: (overrides, limits) => build(overrides).findMaxPrice(Object.assign({ keepPct: 0, reserve: 0, scaleInsurance: false }, limits)),
+  checkPrice: (overrides, price, limits) => build(overrides).checkPrice(price, Object.assign({ keepPct: 0, reserve: 0, scaleInsurance: false }, limits)),
 };

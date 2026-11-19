@@ -435,16 +435,19 @@
 <div class="section-label">Maximum Purchase Price</div>
 <div class="card" id="maxPriceCard">
   <div class="max-price-inputs">
-    <div class="input-group"><label for="inOptCushion">Monthly Savings to Keep ($)</label><input type="text" id="inOptCushion" value="0">
-      <span class="note">Savings that must remain in every year after housing and planned costs.</span>
+    <div class="input-group"><label for="inOptKeepPct">Savings to Keep (%)</label><input type="number" id="inOptKeepPct" value="20" min="0" max="100" step="5">
+      <span class="note">Share of each year's savings that must remain after housing and planned costs.</span>
     </div>
     <div class="input-group"><label for="inOptReserve">Cash to Keep After Closing ($)</label><input type="text" id="inOptReserve" value="0">
       <span class="note">Settlement cash plus savings account left once the purchase is funded.</span>
     </div>
     <button type="button" class="btn-pdf" id="optUsePrice">Use this price</button>
+    <div class="check-row" style="flex-basis:100%;margin:0;">
+      <label><input type="checkbox" id="inOptScaleIns" checked> Scale insurance with the price tested</label>
+    </div>
   </div>
   <div id="maxPriceResult"></div>
-  <p class="note">The highest price that passes two tests with every other input as entered: savings cover housing and planned costs in every year, and the down payment and closing costs can be funded within the max LTV. Down payment percent, rates, rent, insurance and savings do not change with the price, so review them at the price found.</p>
+  <p class="note">The highest price that passes two tests with every other input as entered: savings cover housing and planned costs in every year, and the down payment and closing costs can be funded within the max LTV. Down payment percent, rates, rent and savings do not change with the price. Insurance moves in proportion to the price when the box is ticked, and Use this price then updates the insurance input to match.</p>
 </div>
 
 <!-- BOX vs NO-BOX COMPARISON -->
@@ -585,7 +588,7 @@ function runModel(opts) {
   var refiRate   = pv(el('inRefiRate').value) / 100;
   var refiCostPct = pv(el('inRefiCost').value) / 100;
   var propTaxR   = pv(el('inPropTax').value) / 100;
-  var ins        = pv(el('inInsurance').value);
+  var ins        = (opts.insurance !== undefined) ? opts.insurance : pv(el('inInsurance').value);
   var insInc     = pv(el('inInsIncrease').value) / 100;
   var maintPct   = pv(el('inMaintPct').value) / 100;
   var appr       = pv(el('inAppreciation').value) / 100;
@@ -997,25 +1000,38 @@ function runModel(opts) {
 // ═══════════════════════════════════════════════════
 // MAXIMUM PURCHASE PRICE
 // The highest price that keeps the plan inside its limits, with every other input as entered.
-// limits: { cushion: monthly savings to keep, reserve: cash to keep after closing }
+// limits: { keepPct: share of each year's savings capacity to keep (0 to 1), reserve: cash to keep after closing,
+//           scaleInsurance: move the insurance premium in proportion to the price being tested }
 // ═══════════════════════════════════════════════════
 var PRICE_SEARCH = { low: 100000, high: 30000000, scanStep: 100000 };
 
+// Insurance premium at a tested price: the entered premium, moved in proportion to the price when asked
+function insuranceAt(price, scale) {
+  var basePrice = pv(el('inPrice').value), baseIns = pv(el('inInsurance').value);
+  return scale && basePrice > 0 ? baseIns * price / basePrice : baseIns;
+}
+
 function checkPrice(price, limits) {
-  var m = runModel({ price: price });
-  var worst = m.years[0];
-  m.years.forEach(function(r) { if (r.ownerMonthlySave < worst.ownerMonthlySave) worst = r; });
+  var m = runModel({ price: price, insurance: insuranceAt(price, limits.scaleInsurance) });
+  // Tightest year: the one with the least savings left over what has to be kept.
+  // Savings capacity is what the household saves before housing changes and planned costs.
+  var worst = null;
+  m.years.forEach(function(r) {
+    var required = limits.keepPct * (r.renterMonthlySave + r.plannedCost / 12);
+    var margin = r.ownerMonthlySave - required;
+    if (!worst || margin < worst.margin) worst = { year: r.year, save: r.ownerMonthlySave, required: required, margin: margin };
+  });
   var last = m.years[m.years.length - 1];
   var cashLeft = (m.settlement - m.fromSettle) + (m.hys - m.fromHYS);
   return {
     price: price,
-    // savings cover housing and planned costs in every year, with the cushion left over
-    cashFlowOk: worst.ownerMonthlySave >= limits.cushion - 0.005,
+    // savings cover housing and planned costs in every year, with the required share left over
+    cashFlowOk: worst.margin >= -0.005,
     // the purchase can be funded: no gap, loan within the max LTV, and the cash reserve intact
     fundingOk: m.fundingGap < 0.5 && m.collateralGap < 0.5 && cashLeft >= limits.reserve - 0.5,
     buyWins: last.advantage >= 0,
-    worstYear: worst.year, worstSave: worst.ownerMonthlySave, cashLeft: cashLeft,
-    monthlyOwn: m.years[0].monthlyOwn, advantage: last.advantage, horizon: m.horizon,
+    worstYear: worst.year, worstSave: worst.save, worstRequired: worst.required, cashLeft: cashLeft,
+    monthlyOwn: m.years[0].monthlyOwn, insurance: m.years[0].annualIns, advantage: last.advantage, horizon: m.horizon,
     fundingGap: m.fundingGap, collateralGap: m.collateralGap
   };
 }
@@ -1220,7 +1236,8 @@ function render() {
 }
 
 function renderMaxPrice(m) {
-  var limits = { cushion: pv(el('inOptCushion').value), reserve: pv(el('inOptReserve').value) };
+  var keepPct = Math.min(100, Math.max(0, pv(el('inOptKeepPct').value)));
+  var limits = { keepPct: keepPct / 100, reserve: pv(el('inOptReserve').value), scaleInsurance: el('inOptScaleIns').checked };
   var r = findMaxPrice(limits);
   var row = function(lbl, val, style) { return '<div class="info-row"' + (style ? ' style="' + style + '"' : '') + '><span class="lbl">' + lbl + '</span><span class="val">' + val + '</span></div>'; };
   var priceText = function(p) { return p === null ? 'None in range' : p >= r.high ? 'No limit up to ' + fmtK(r.high) : fmt(p); };
@@ -1228,12 +1245,12 @@ function renderMaxPrice(m) {
 
   if (r.max === null) {
     var why = r.cashFlow === null
-      ? 'Savings fall short in year ' + r.atLow.worstYear + ' even at ' + fmtK(r.low) + ' (' + fmtSave(r.atLow.worstSave) + ' against a ' + fmt(limits.cushion) + '/mo cushion). Check planned costs, savings and the cushion.'
+      ? 'Savings fall short in year ' + r.atLow.worstYear + ' even at ' + fmtK(r.low) + ' (' + fmtSave(r.atLow.worstSave) + ' left, ' + fmt(r.atLow.worstRequired) + '/mo to keep). Check planned costs, savings and the share to keep.'
       : 'The purchase cannot be funded even at ' + fmtK(r.low) + ' with ' + fmt(limits.reserve) + ' kept in cash. Check the reserve, cash, collateral and max LTV.';
     h += '<div class="max-price-headline"><div class="value negative">No price works</div><div class="sub">' + why + '</div></div>';
   } else {
     var bindText = r.max >= r.high ? 'Neither limit is reached in the range tested.'
-      : r.binding === 'cashFlow' ? 'Set by cash flow: at a higher price, savings would not cover costs in year ' + r.atMax.worstYear + '.'
+      : r.binding === 'cashFlow' ? 'Set by cash flow: at a higher price, ' + (keepPct > 0 ? 'less than ' + keepPct + '% of savings would be left in year ' : 'savings would not cover costs in year ') + r.atMax.worstYear + '.'
       : r.binding === 'funding' ? 'Set by funding: at a higher price, the down payment could not be funded within the max LTV and cash reserve.'
       : 'Cash flow and funding reach their limits at the same price.';
     h += '<div class="max-price-headline"><div class="value neutral">' + priceText(r.max) + '</div><div class="sub">' + bindText + '</div></div>';
@@ -1255,7 +1272,8 @@ function renderMaxPrice(m) {
   h += '</div><div>';
   if (r.atMax) {
     h += row('At the maximum: year 1 cost to own', fmt(r.atMax.monthlyOwn) + '/mo');
-    h += row('Tightest year for savings', 'Year ' + r.atMax.worstYear + ': ' + fmtSave(r.atMax.worstSave));
+    h += row('Tightest year for savings', 'Year ' + r.atMax.worstYear + ': ' + fmtSave(r.atMax.worstSave) + ' left' + (keepPct > 0 ? ' (' + fmt(r.atMax.worstRequired) + ' to keep)' : ''));
+    if (limits.scaleInsurance) h += row('Insurance at the maximum', fmt(r.atMax.insurance) + '/yr');
     h += row('Cash left after closing', fmt(r.atMax.cashLeft));
     h += row('Year ' + m.horizon + ' buy v rent', (r.atMax.advantage >= 0 ? 'Buy ahead by ' : 'Rent ahead by ') + fmtK(Math.abs(r.atMax.advantage)), 'color:' + (r.atMax.advantage >= 0 ? 'var(--green)' : 'var(--red)') + ';');
   }
@@ -1266,6 +1284,7 @@ function renderMaxPrice(m) {
   var usable = r.max !== null && r.max < r.high && r.max !== m.price;
   btn.disabled = !usable;
   btn.dataset.price = usable ? r.max : '';
+  btn.dataset.insurance = usable && limits.scaleInsurance ? Math.round(r.atMax.insurance) : '';
 }
 
 function renderMain(yrs) {
@@ -1929,7 +1948,7 @@ el('inUseBox').addEventListener('change', function() {
   try { render(); } catch(e) { console.error(e); }
 });
 
-['inPrice','inInsurance','inRent','inMarketRent','inSettlement','inHYS','inSALT','inFedStdDed','inCAStdDed','inMAGI','inCAIncomeTax','inCollateral','inBoxPrincipal','inCollateralNoBox','inCostBasisPct','inInvestRetNoBox','inMonthlySavings','inOptCushion','inOptReserve'].forEach(function(id) {
+['inPrice','inInsurance','inRent','inMarketRent','inSettlement','inHYS','inSALT','inFedStdDed','inCAStdDed','inMAGI','inCAIncomeTax','inCollateral','inBoxPrincipal','inCollateralNoBox','inCostBasisPct','inInvestRetNoBox','inMonthlySavings','inOptReserve'].forEach(function(id) {
   el(id).addEventListener('blur', function() { var v = pv(this.value); if (v) this.value = v.toLocaleString('en-US'); });
 });
 
@@ -1937,6 +1956,9 @@ el('inUseBox').addEventListener('change', function() {
 el('optUsePrice').addEventListener('click', function() {
   var p = pv(this.dataset.price);
   if (!p) return;
+  // When insurance is scaled with price, move the premium too, so the model matches what the search tested
+  var ins = pv(this.dataset.insurance);
+  if (ins) el('inInsurance').value = ins.toLocaleString('en-US');
   el('inPrice').value = p.toLocaleString('en-US');
   try { render(); } catch(e) { console.error(e); }
 });
