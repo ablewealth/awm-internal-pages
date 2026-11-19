@@ -176,13 +176,13 @@
 
   <div class="card" style="margin-top:12px;border:2px solid #f59e0b;background:linear-gradient(135deg,#fffbeb,#fef3c7);">
     <h3 style="color:#92400e;">Ongoing Savings & Reinvestment <span style="font-size:11px;font-weight:500;color:#b45309;margin-left:6px;">Critical Assumptions</span></h3>
-    <p style="font-size:11px;color:#78350f;margin:0 0 8px;line-height:1.35;">The client currently saves and invests monthly. Buying a home increases housing costs, which reduces the amount available to save. The renter continues the full savings rate plus any cost advantage over owning. This section captures both the existing savings habit and how much of any cost differential actually gets reinvested.</p>
+    <p style="font-size:11px;color:#78350f;margin:0 0 8px;line-height:1.35;">The client currently saves and invests monthly. Buying a home increases housing costs, which reduces the amount available to save. The renter continues the full savings rate. The reinvestment rate applies only if owning ever costs less than renting: it sets how much of that difference the owner invests.</p>
     <div class="input-row-3">
       <div class="input-group"><label>Current Monthly Savings ($)</label><input type="text" id="inMonthlySavings" value="13,000">
         <span class="note">Amount currently going to taxable investment acct.</span>
       </div>
       <div class="input-group what-if"><label>Reinvestment Rate (%)<span class="what-if-tag">WHAT-IF</span></label><input type="number" id="inReinvestRate" value="75" min="0" max="100" step="5">
-        <span class="note">% of cost differential actually invested.</span>
+        <span class="note">Only when owning costs less than renting: % of that difference the owner invests.</span>
       </div>
       <div class="input-group"><label>Savings Growth (%/yr)</label><input type="number" id="inSavingsGrowth" value="3.0" min="0" max="15" step="0.5">
         <span class="note">Annual increase in savings capacity (income growth).</span>
@@ -190,7 +190,7 @@
     </div>
     <div class="input-row-3" style="margin-top:6px;">
       <div class="input-group"><label>Renter Monthly Savings</label><input type="text" id="dispRenterSave" value="—" readonly style="background:rgba(255,255,255,0.7);color:#555;">
-        <span class="note">Full savings + reinvested cost advantage.</span>
+        <span class="note">Current savings, continued in full.</span>
       </div>
       <div class="input-group"><label>Owner Monthly Savings</label><input type="text" id="dispOwnerSave" value="—" readonly style="background:rgba(255,255,255,0.7);color:#555;">
         <span class="note">Reduced by higher housing cost vs. current rent.</span>
@@ -704,9 +704,9 @@ function runModel(opts) {
     var yrSavings = monthlySavings * Math.pow(1 + savingsGrowth, y - 1);
 
     // Renter: keeps full savings (already paying rent from income).
-    // Plus, if owning costs more, renter captures some of that differential at reinvestment rate.
+    // The owner's savings below are already reduced by the full cost differential, so the
+    // renter gets no extra credit for it here. Adding it would count the same gap twice.
     var renterMonthlySave = yrSavings;
-    if (diff > 0) renterMonthlySave += diff * reinvestRate;
 
     // Owner: extra housing cost above current rent reduces savings capacity.
     // If owning is cheaper than renting, owner captures some differential at reinvestment rate.
@@ -1320,7 +1320,7 @@ function generateSummary(m) {
     }
     h += ' The money not spent on a down payment would be split: settlement cash (' + fmtK(m.origSettlement) + ') invested at ' + (m.investRet*100).toFixed(1) + '% market return, and savings (' + fmtK(m.origHYS) + ') earning ' + (m.hysRate*100).toFixed(1) + '% in a high-yield account.</p>';
     h += '<p><strong>Ongoing savings:</strong> You currently invest ' + fmt(m.monthlySavings) + '/mo into your taxable account. As a renter, you continue this in full. As an owner, the higher housing costs reduce your savings capacity to approximately ' + fmt(y1.ownerMonthlySave) + '/mo in year 1 — a gap of <span class="key-number">' + fmt(y1.renterMonthlySave - y1.ownerMonthlySave) + '/mo</span> in favor of the renter. ';
-    h += 'This compounds significantly over ' + horizon + ' years. The model assumes ' + (m.reinvestRate*100).toFixed(0) + '% of any cost differential is actually reinvested (not lost to lifestyle spending).</p>';
+    h += 'This compounds significantly over ' + horizon + ' years.</p>';
     h += '<p>Combined, the renter\'s net worth grows to a projected <span class="key-number">' + fmtK(last.renterNW) + '</span>.</p>';
   } else {
     h += '<p>Starting rent: ' + fmt(pv(el('inRent').value)) + '/mo, terminal: ' + fmtK(last.annualRent/12) + '/mo (' + rentInc + '% escalation). ';
@@ -1330,7 +1330,7 @@ function generateSummary(m) {
     h += 'Renter allocation: ' + fmtK(m.origSettlement) + ' settlement → market (' + (m.investRet*100).toFixed(1) + '%), ' + fmtK(m.origHYS) + ' HYS → savings (' + (m.hysRate*100).toFixed(1) + '%).</p>';
     h += '<p><strong>Ongoing savings model:</strong> Client currently saves ' + fmt(m.monthlySavings) + '/mo (growing ' + (m.savingsGrowth*100).toFixed(1) + '%/yr). ';
     h += 'Renter yr-1: ' + fmt(y1.renterMonthlySave) + '/mo to market. Owner yr-1: ' + fmt(y1.ownerMonthlySave) + '/mo (reduced by ' + fmt(y1.renterMonthlySave - y1.ownerMonthlySave) + '/mo higher housing cost). ';
-    h += 'Reinvestment rate on cost differential: ' + (m.reinvestRate*100).toFixed(0) + '%. ';
+    h += 'Reinvestment rate (applies only when owning costs less than renting): ' + (m.reinvestRate*100).toFixed(0) + '%. ';
     h += 'Terminal: market ' + fmtK(last.renterMkt) + ' + HYS ' + fmtK(last.renterHYS) + ' + portfolio ' + fmtK(last.renterCollateral) + ' = <strong>' + fmtK(last.renterNW) + '</strong>.</p>';
   }
 
@@ -1429,10 +1429,10 @@ function generateSummary(m) {
       h += 'The analysis assumes you hold for the full ' + horizon + ' years — selling earlier could significantly change the outcome due to transaction costs.</p>';
     }
   } else {
-    h += '<p>Biggest levers: mortgage rate (refi scenario' + (m.didRefi ? ' — modeled' : ' — set Refi Year > 0 to model') + '), appreciation CAGR, rent escalation, investment return delta, <strong>reinvestment rate</strong> (' + (m.reinvestRate*100).toFixed(0) + '%), and <strong>ongoing savings capacity</strong> (' + fmt(m.monthlySavings) + '/mo base). ';
+    h += '<p>Biggest levers: mortgage rate (refi scenario' + (m.didRefi ? ' — modeled' : ' — set Refi Year > 0 to model') + '), appreciation CAGR, rent escalation, investment return delta, and <strong>ongoing savings capacity</strong> (' + fmt(m.monthlySavings) + '/mo base). ';
     h += 'At ' + (m.didRefi ? 'post-refi' : 'current') + ' rate, yr-1 interest is ' + fmtK(y1.yrInterest) + ' with ' + fmtK(y1.yrPrincipal) + ' to principal. ';
     h += 'Each 0.5% increase in appreciation CAGR adds ~' + fmtK(m.price * 0.005 * horizon) + ' to terminal home value (linear approx). ';
-    h += 'Savings gap (' + fmt(y1.renterMonthlySave - y1.ownerMonthlySave) + '/mo yr-1) compounds at ' + (m.investRet*100).toFixed(1) + '% — a 10% change in reinvestment rate shifts terminal NW by ~' + fmtK((y1.renterMonthlySave - y1.ownerMonthlySave) * 12 * 0.10 * horizon) + ' (linear approx).</p>';
+    h += 'Savings gap (' + fmt(y1.renterMonthlySave - y1.ownerMonthlySave) + '/mo yr-1) compounds at ' + (m.investRet*100).toFixed(1) + '%.</p>';
   }
 
   // ── RISK CONSIDERATIONS ──
@@ -1484,7 +1484,7 @@ function generateSummary(m) {
     h += '<span>Mortgage int ded: capped at $750K debt</span>';
     h += '<span>Std ded inflation: 2%/yr</span>';
     h += '<span>Ongoing savings: ' + fmt(m.monthlySavings) + '/mo (' + (m.savingsGrowth*100).toFixed(1) + '%/yr growth)</span>';
-    h += '<span>Reinvestment rate: ' + (m.reinvestRate*100).toFixed(0) + '% of cost differential</span>';
+    h += '<span>Reinvestment rate: ' + (m.reinvestRate*100).toFixed(0) + '% (only when owning costs less)</span>';
     h += '</div>';
   }
 
