@@ -31,13 +31,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Run tests
+        # A failing test stops the deploy, so the live site keeps the last good version
+        run: |
+          node tests/rentvbuy.test.js
+          node tests/site.test.js
+      - name: Assemble site
+        # Publish the pages and their assets only; tests, README and workflow files stay out of the site
+        run: |
+          mkdir _site
+          cp -r index.html pages assets _site/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          path: '_site'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
