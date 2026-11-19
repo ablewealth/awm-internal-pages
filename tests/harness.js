@@ -31,7 +31,7 @@ const start = main.indexOf('"use strict";');
 const end = main.indexOf('function render()');
 if (start < 0 || end < 0) throw new Error('Could not find the model in ' + PAGE);
 const factory = new Function('document',
-  main.slice(start, end) + '\nreturn { runModel: runModel, TAX: TAX, saltCapFor: saltCapFor, mortgageShare: mortgageShare, parsePlannedCosts: parsePlannedCosts };');
+  main.slice(start, end) + '\nreturn { runModel: runModel, TAX: TAX, saltCapFor: saltCapFor, mortgageShare: mortgageShare, parsePlannedCosts: parsePlannedCosts, findMaxPrice: findMaxPrice, checkPrice: checkPrice };');
 
 const defaults = readDefaults();
 
@@ -52,4 +52,6 @@ module.exports = {
   TAX: base.TAX,
   helpers: { saltCapFor: base.saltCapFor, mortgageShare: base.mortgageShare, parsePlannedCosts: base.parsePlannedCosts },
   run: (overrides, opts) => build(overrides).runModel(opts || {}),
+  maxPrice: (overrides, limits) => build(overrides).findMaxPrice(Object.assign({ cushion: 0, reserve: 0 }, limits)),
+  checkPrice: (overrides, price, limits) => build(overrides).checkPrice(price, Object.assign({ cushion: 0, reserve: 0 }, limits)),
 };

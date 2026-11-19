@@ -33,6 +33,17 @@
   .input-group input:focus, .input-group select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(59,130,246,0.12); }
   .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .input-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.max-price-inputs { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; margin-bottom: 12px; }
+.max-price-inputs .input-group { flex: 0 1 230px; }
+.max-price-inputs .btn-pdf { margin-top: 15px; height: 29px; white-space: nowrap; }
+.max-price-inputs .btn-pdf:disabled { opacity: 0.45; cursor: default; background: white; color: var(--navy); }
+.max-price-headline { margin-bottom: 10px; }
+.max-price-headline .value { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.max-price-headline .value.neutral { color: var(--navy); }
+.max-price-headline .value.negative { color: var(--red); }
+.max-price-headline .sub { font-size: 12px; color: var(--muted); }
+.max-price-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; }
+@media (max-width: 700px) { .max-price-grid { grid-template-columns: 1fr; } }
 .check-row { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 4px; }
 .check-row label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text); cursor: pointer; }
 .check-row input { width: auto; margin: 0; }
@@ -420,6 +431,22 @@
 </div>
 </div>
 
+<!-- MAXIMUM PURCHASE PRICE -->
+<div class="section-label">Maximum Purchase Price</div>
+<div class="card" id="maxPriceCard">
+  <div class="max-price-inputs">
+    <div class="input-group"><label for="inOptCushion">Monthly Savings to Keep ($)</label><input type="text" id="inOptCushion" value="0">
+      <span class="note">Savings that must remain in every year after housing and planned costs.</span>
+    </div>
+    <div class="input-group"><label for="inOptReserve">Cash to Keep After Closing ($)</label><input type="text" id="inOptReserve" value="0">
+      <span class="note">Settlement cash plus savings account left once the purchase is funded.</span>
+    </div>
+    <button type="button" class="btn-pdf" id="optUsePrice">Use this price</button>
+  </div>
+  <div id="maxPriceResult"></div>
+  <p class="note">The highest price that passes two tests with every other input as entered: savings cover housing and planned costs in every year, and the down payment and closing costs can be funded within the max LTV. Down payment percent, rates, rent, insurance and savings do not change with the price, so review them at the price found.</p>
+</div>
+
 <!-- BOX vs NO-BOX COMPARISON -->
 <div class="section-label">Securities Loan Benefit Analysis</div>
 <div class="card" style="overflow-x:auto;" id="boxComparisonCard">
@@ -550,7 +577,7 @@ function parsePlannedCosts(text, firstTaxYear) {
 // ═══════════════════════════════════════════════════
 function runModel(opts) {
   opts = opts || {};
-  var price      = pv(el('inPrice').value);
+  var price      = (opts.price !== undefined) ? opts.price : pv(el('inPrice').value);
   var downPct    = pv(el('inDownPct').value) / 100;
   var mortRate   = pv(el('inMortRate').value) / 100;
   var mortTerm   = parseInt(el('inMortTerm').value);
@@ -594,7 +621,7 @@ function runModel(opts) {
   var origHYS = hys;
   var origCollateral = collateral;
   var addToCollateral = 0, addToCollateralFromSettle = 0, addToCollateralFromHYS = 0;
-  var liquidatedFromPortfolio = 0, liquidationCapGainsTax = 0;
+  var liquidationCapGainsTax = 0;
 
   // LTV enforcement moved below — needs totalUpfront to set boxLoanAmt first
   var fedRate    = pv(el('inFedRate').value) / 100;
@@ -626,7 +653,11 @@ function runModel(opts) {
   // In Los Angeles the seller customarily pays the transfer tax, so the buyer pays it only when the box is ticked
   var purchaseTransferTax = buyerPaysTransfer ? price * transferPct : 0;
   var totalUpfront = downPayment + closingCosts + purchaseTransferTax;
-  if (useBox) { boxLoanAmt = totalUpfront; el('inBoxAmt').value = totalUpfront.toLocaleString('en-US', {maximumFractionDigits:0}); }
+  if (useBox) {
+    boxLoanAmt = totalUpfront;
+    // the read-only loan box follows the price on the page, not a price being tested by the optimizer
+    if (opts.price === undefined) el('inBoxAmt').value = totalUpfront.toLocaleString('en-US', {maximumFractionDigits:0});
+  }
   var loanAmt = price - downPayment;
 
   // ── Enforce the max LTV on the securities-backed loan ──
@@ -643,9 +674,11 @@ function runModel(opts) {
     settlement -= addToCollateralFromSettle;
     hys -= addToCollateralFromHYS;
   }
+  // Collateral still missing after all the cash has been moved in: the loan would be over the max LTV
+  var collateralGap = useBox ? Math.max(0, boxLoanAmt / maxLTV - collateral) : 0;
 
   // ── Funding waterfall ──
-  var fromBox = 0, fromSettle = 0, fromHYS = 0, fromLiquidation = 0;
+  var fromBox = 0, fromSettle = 0, fromHYS = 0, fromLiquidation = 0, portfolioSold = 0;
   var rem = totalUpfront;
 
   if (useBox) {
@@ -663,12 +696,14 @@ function runModel(opts) {
     fromHYS = Math.min(hys, rem);
     rem -= fromHYS;
     if (rem > 0 && collateral > 0) {
-      fromLiquidation = Math.min(collateral, rem);
+      // Selling triggers capital gains tax (federal LTCG + NIIT, and California), and that tax is paid
+      // out of the sale too, so more has to be sold than the purchase needs.
+      var taxPerDollarSold = (1 - costBasisPct) * (ltcgRate + caRate);
+      portfolioSold = Math.min(collateral, rem / (1 - taxPerDollarSold));
+      liquidationCapGainsTax = portfolioSold * taxPerDollarSold;
+      fromLiquidation = portfolioSold - liquidationCapGainsTax; // cash that reaches the purchase
       rem -= fromLiquidation;
-      // Capital gains tax on liquidated portion
-      var gainPortion = fromLiquidation * (1 - costBasisPct);
-      liquidationCapGainsTax = gainPortion * (ltcgRate + caRate); // fed LTCG + CA
-      collateral -= fromLiquidation;
+      collateral -= portfolioSold;
     }
   }
   var fundingGap = Math.max(0, rem);
@@ -938,7 +973,7 @@ function runModel(opts) {
     closingCosts: closingCosts, purchaseTransferTax: purchaseTransferTax,
     totalUpfront: totalUpfront, loanAmt: loanAmt, monthlyPmt: monthlyPmt,
     fromSettle: fromSettle, fromHYS: fromHYS, fromBox: fromBox, fundingGap: fundingGap,
-    fromLiquidation: fromLiquidation, liquidationCapGainsTax: liquidationCapGainsTax,
+    fromLiquidation: fromLiquidation, portfolioSold: portfolioSold, liquidationCapGainsTax: liquidationCapGainsTax,
     boxLoanAmt: boxLoanAmt, boxRate: boxRate, collateral: collateral,
     origCollateral: origCollateral,
     addToCollateral: addToCollateral, addToCollateralFromSettle: addToCollateralFromSettle,
@@ -948,7 +983,7 @@ function runModel(opts) {
     useBox: useBox, investRet: investRet,
     price: price, horizon: horizon,
     effectiveSALTCap: effectiveSALTCap, saltCapUnphased: saltCapUnphased, saltBaseCap: saltBaseCap, magi: magi,
-    maxLTV: maxLTV, boxTaxMode: boxTaxMode, firstTaxYear: firstTaxYear, inCityLA: inCityLA,
+    maxLTV: maxLTV, collateralGap: collateralGap, boxTaxMode: boxTaxMode, firstTaxYear: firstTaxYear, inCityLA: inCityLA,
     buyerPaysTransfer: buyerPaysTransfer,
     settlement: settlement, hys: hys,
     rentResetYear: rentResetYear, marketRent: marketRent, rent: rent,
@@ -956,6 +991,80 @@ function runModel(opts) {
     refiYear: refiYear, refiRate: refiRate, didRefi: didRefi, refiCostTotal: refiCostTotal,
     preRefiRate: preRefiRate, preRefiPayment: preRefiPayment, postRefiPayment: didRefi ? monthlyPmt : 0,
     reinvestRate: reinvestRate, monthlySavings: monthlySavings, savingsGrowth: savingsGrowth
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// MAXIMUM PURCHASE PRICE
+// The highest price that keeps the plan inside its limits, with every other input as entered.
+// limits: { cushion: monthly savings to keep, reserve: cash to keep after closing }
+// ═══════════════════════════════════════════════════
+var PRICE_SEARCH = { low: 100000, high: 30000000, scanStep: 100000 };
+
+function checkPrice(price, limits) {
+  var m = runModel({ price: price });
+  var worst = m.years[0];
+  m.years.forEach(function(r) { if (r.ownerMonthlySave < worst.ownerMonthlySave) worst = r; });
+  var last = m.years[m.years.length - 1];
+  var cashLeft = (m.settlement - m.fromSettle) + (m.hys - m.fromHYS);
+  return {
+    price: price,
+    // savings cover housing and planned costs in every year, with the cushion left over
+    cashFlowOk: worst.ownerMonthlySave >= limits.cushion - 0.005,
+    // the purchase can be funded: no gap, loan within the max LTV, and the cash reserve intact
+    fundingOk: m.fundingGap < 0.5 && m.collateralGap < 0.5 && cashLeft >= limits.reserve - 0.5,
+    buyWins: last.advantage >= 0,
+    worstYear: worst.year, worstSave: worst.ownerMonthlySave, cashLeft: cashLeft,
+    monthlyOwn: m.years[0].monthlyOwn, advantage: last.advantage, horizon: m.horizon,
+    fundingGap: m.fundingGap, collateralGap: m.collateralGap
+  };
+}
+
+function findMaxPrice(limits) {
+  var S = PRICE_SEARCH;
+  var floorTo = function(x, unit) { return Math.floor(x / unit) * unit; };
+
+  // Highest price that passes `key`. Both limits get tighter as the price rises, so a bisection finds the edge.
+  // Returns null when even the lowest price fails, and S.high when no price in range fails.
+  function edge(key, lo, hi) {
+    if (!checkPrice(lo, limits)[key]) return null;
+    if (checkPrice(hi, limits)[key]) return hi;
+    while (hi - lo > 1000) {
+      var mid = Math.round((lo + hi) / 2000) * 1000;
+      if (mid <= lo || mid >= hi) break;
+      if (checkPrice(mid, limits)[key]) lo = mid; else hi = mid;
+    }
+    return lo;
+  }
+  var cashFlow = edge('cashFlowOk', S.low, S.high);
+  var funding = edge('fundingOk', S.low, S.high);
+  if (cashFlow !== null && cashFlow < S.high) cashFlow = floorTo(cashFlow, 5000);
+  if (funding !== null && funding < S.high) funding = floorTo(funding, 5000);
+
+  var max = (cashFlow === null || funding === null) ? null : Math.min(cashFlow, funding);
+  var binding = max === null ? (cashFlow === null ? 'cashFlow' : 'funding')
+    : cashFlow < funding ? 'cashFlow' : funding < cashFlow ? 'funding' : 'both';
+
+  // Buying against renting does not move in one direction with price, so scan the range instead
+  var pass = [];
+  for (var p = S.low; p <= S.high; p += S.scanStep) pass.push({ price: p, ok: checkPrice(p, limits).buyWins });
+  var wins = pass.filter(function(x) { return x.ok; });
+  var buy;
+  if (!wins.length) buy = { kind: 'never' };
+  else if (wins.length === pass.length) buy = { kind: 'always' };
+  else {
+    var firstWin = wins[0].price, lastWin = wins[wins.length - 1].price;
+    var unbroken = wins.length === Math.round((lastWin - firstWin) / S.scanStep) + 1;
+    if (unbroken && firstWin === S.low) buy = { kind: 'upTo', price: floorTo(edge('buyWins', lastWin, lastWin + S.scanStep), 5000) };
+    else if (unbroken && lastWin === S.high) buy = { kind: 'from', price: firstWin };
+    else buy = { kind: 'range', low: firstWin, high: lastWin };
+  }
+
+  return {
+    cashFlow: cashFlow, funding: funding, max: max, binding: binding, buy: buy,
+    atMax: max === null ? null : checkPrice(max, limits),
+    atLow: checkPrice(S.low, limits),
+    low: S.low, high: S.high
   };
 }
 
@@ -1040,6 +1149,7 @@ function render() {
       '<div class="info-row"><span class="lbl">Residual Settlement Cash</span><span class="val">' + fmtK(m.settlement - m.fromSettle) + '</span></div>' +
       '<div class="info-row"><span class="lbl">Residual HYS</span><span class="val">' + fmtK(m.hys - m.fromHYS) + '</span></div>' +
       (m.fundingGap > 0 ? '<div class="info-row" style="color:var(--red);"><span class="lbl"><strong>Funding Gap</strong></span><span class="val">' + fmtK(m.fundingGap) + '</span></div>' : '') +
+      (m.collateralGap > 0.5 ? '<div class="info-row" style="color:var(--red);"><span class="lbl"><strong>Over max LTV</strong>: collateral short by</span><span class="val">' + fmtK(m.collateralGap) + '</span></div>' : '') +
       '<p class="note">Securities-backed loan: interest-only, no maturity, no closing costs. Max ' + ltvPct + '% LTV required.' + (m.addToCollateral > 0 ? ' ' + fmtK(m.addToCollateral) + ' moved from cash to collateral portfolio to meet LTV requirement.' : '') + ' Avoids capital gains on Schwab portfolio.</p>';
   } else {
     fundingHTML +=
@@ -1103,9 +1213,59 @@ function render() {
   renderEquity(yrs);
   renderBE(yrs, m.beYear);
   renderTable(yrs);
+  renderMaxPrice(m);
   renderComparison(m);
   if (m.useBox) renderPaydownOptimizer(m);
   generateSummary(m);
+}
+
+function renderMaxPrice(m) {
+  var limits = { cushion: pv(el('inOptCushion').value), reserve: pv(el('inOptReserve').value) };
+  var r = findMaxPrice(limits);
+  var row = function(lbl, val, style) { return '<div class="info-row"' + (style ? ' style="' + style + '"' : '') + '><span class="lbl">' + lbl + '</span><span class="val">' + val + '</span></div>'; };
+  var priceText = function(p) { return p === null ? 'None in range' : p >= r.high ? 'No limit up to ' + fmtK(r.high) : fmt(p); };
+  var h = '';
+
+  if (r.max === null) {
+    var why = r.cashFlow === null
+      ? 'Savings fall short in year ' + r.atLow.worstYear + ' even at ' + fmtK(r.low) + ' (' + fmtSave(r.atLow.worstSave) + ' against a ' + fmt(limits.cushion) + '/mo cushion). Check planned costs, savings and the cushion.'
+      : 'The purchase cannot be funded even at ' + fmtK(r.low) + ' with ' + fmt(limits.reserve) + ' kept in cash. Check the reserve, cash, collateral and max LTV.';
+    h += '<div class="max-price-headline"><div class="value negative">No price works</div><div class="sub">' + why + '</div></div>';
+  } else {
+    var bindText = r.max >= r.high ? 'Neither limit is reached in the range tested.'
+      : r.binding === 'cashFlow' ? 'Set by cash flow: at a higher price, savings would not cover costs in year ' + r.atMax.worstYear + '.'
+      : r.binding === 'funding' ? 'Set by funding: at a higher price, the down payment could not be funded within the max LTV and cash reserve.'
+      : 'Cash flow and funding reach their limits at the same price.';
+    h += '<div class="max-price-headline"><div class="value neutral">' + priceText(r.max) + '</div><div class="sub">' + bindText + '</div></div>';
+  }
+
+  h += '<div class="max-price-grid"><div>';
+  h += row('Cash flow limit', priceText(r.cashFlow), r.binding === 'cashFlow' || r.binding === 'both' ? 'font-weight:700;' : '');
+  h += row('Funding limit', priceText(r.funding), r.binding === 'funding' || r.binding === 'both' ? 'font-weight:700;' : '');
+  var buyText = r.buy.kind === 'never' ? 'At no price tested'
+    : r.buy.kind === 'always' ? 'At every price tested'
+    : r.buy.kind === 'upTo' ? 'Up to ' + fmt(r.buy.price)
+    : r.buy.kind === 'from' ? 'From about ' + fmtK(r.buy.price) + ' up'
+    : 'Between about ' + fmtK(r.buy.low) + ' and ' + fmtK(r.buy.high);
+  h += row('Buying matches or beats renting at year ' + m.horizon, buyText);
+  var gap = r.max === null ? null : m.price - r.max;
+  if (gap !== null && r.max < r.high) {
+    h += row('Price entered: ' + fmt(m.price), gap > 0 ? fmt(gap) + ' over the maximum' : gap < 0 ? fmt(-gap) + ' under the maximum' : 'At the maximum', 'color:' + (gap > 0 ? 'var(--red)' : 'var(--green)') + ';');
+  }
+  h += '</div><div>';
+  if (r.atMax) {
+    h += row('At the maximum: year 1 cost to own', fmt(r.atMax.monthlyOwn) + '/mo');
+    h += row('Tightest year for savings', 'Year ' + r.atMax.worstYear + ': ' + fmtSave(r.atMax.worstSave));
+    h += row('Cash left after closing', fmt(r.atMax.cashLeft));
+    h += row('Year ' + m.horizon + ' buy v rent', (r.atMax.advantage >= 0 ? 'Buy ahead by ' : 'Rent ahead by ') + fmtK(Math.abs(r.atMax.advantage)), 'color:' + (r.atMax.advantage >= 0 ? 'var(--green)' : 'var(--red)') + ';');
+  }
+  h += '</div></div>';
+  el('maxPriceResult').innerHTML = h;
+
+  var btn = el('optUsePrice');
+  var usable = r.max !== null && r.max < r.high && r.max !== m.price;
+  btn.disabled = !usable;
+  btn.dataset.price = usable ? r.max : '';
 }
 
 function renderMain(yrs) {
@@ -1227,7 +1387,7 @@ function renderComparison(currentModel) {
   h += '<div class="metric"><span>Portfolio Value</span><span class="v">' + fmtK(noBoxLast.collateralVal) + '</span></div>';
   h += '<div class="metric"><span>Total Loan Interest Paid</span><span class="v">$0</span></div>';
   h += '<div class="metric"><span>Liquidation Tax at Purchase</span><span class="v" style="color:var(--red);">' + fmtK(liqTaxCost) + '</span></div>';
-  h += '<div class="metric"><span>Portfolio Liquidated</span><span class="v" style="color:var(--red);">' + fmtK(noBoxResult.fromLiquidation) + '</span></div>';
+  h += '<div class="metric"><span>Portfolio Liquidated</span><span class="v" style="color:var(--red);">' + fmtK(noBoxResult.portfolioSold) + '</span></div>';
   h += '</div>';
 
   // Column 3: Delta
@@ -1550,7 +1710,7 @@ function generateSummary(m) {
     var extraTaxBenefits = 0;
     boxResult.years.forEach(function(y, i) { extraTaxBenefits += y.totalTaxBenefit - noBoxResult.years[i].totalTaxBenefit; });
     var liqTaxAvoided = noBoxResult.liquidationCapGainsTax;
-    var liquidatedAmt = noBoxResult.fromLiquidation;
+    var liquidatedAmt = noBoxResult.portfolioSold;
 
     h += '<div class="section-heading" style="color:#7c3aed;">Advisory Strategy Value</div>';
     h += '<div style="background:linear-gradient(135deg,#faf5ff,#ede9fe);border:2px solid #c4b5fd;border-radius:10px;padding:16px 20px;margin-bottom:12px;">';
@@ -1769,8 +1929,16 @@ el('inUseBox').addEventListener('change', function() {
   try { render(); } catch(e) { console.error(e); }
 });
 
-['inPrice','inInsurance','inRent','inMarketRent','inSettlement','inHYS','inSALT','inFedStdDed','inCAStdDed','inMAGI','inCAIncomeTax','inCollateral','inBoxPrincipal','inCollateralNoBox','inCostBasisPct','inInvestRetNoBox','inMonthlySavings'].forEach(function(id) {
+['inPrice','inInsurance','inRent','inMarketRent','inSettlement','inHYS','inSALT','inFedStdDed','inCAStdDed','inMAGI','inCAIncomeTax','inCollateral','inBoxPrincipal','inCollateralNoBox','inCostBasisPct','inInvestRetNoBox','inMonthlySavings','inOptCushion','inOptReserve'].forEach(function(id) {
   el(id).addEventListener('blur', function() { var v = pv(this.value); if (v) this.value = v.toLocaleString('en-US'); });
+});
+
+// Max price card: put the optimizer's price into the Purchase Price box
+el('optUsePrice').addEventListener('click', function() {
+  var p = pv(this.dataset.price);
+  if (!p) return;
+  el('inPrice').value = p.toLocaleString('en-US');
+  try { render(); } catch(e) { console.error(e); }
 });
 
 // Tone toggle + PDF button wiring

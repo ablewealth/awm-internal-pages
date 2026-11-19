@@ -47,6 +47,15 @@ When a change to the rent v buy model moves the expected figures on purpose, upd
 
 Scenario files hold client figures. Keep them out of this repository.
 
+### Maximum purchase price
+
+The Maximum Purchase Price card finds the highest price that passes two tests, with every other input as entered:
+
+- **Cash flow:** savings cover housing and planned costs in every year, with the chosen monthly cushion left over.
+- **Funding:** the down payment and closing costs can be funded with no gap, the loan stays within the max LTV, and the chosen cash reserve is left after closing.
+
+It also reports the price range where buying matches or beats renting at the horizon. Rent, insurance, the down payment percent and savings do not change with the price being tested. The search runs from $100,000 to $30,000,000 and rounds down to the nearest $5,000.
+
 ### Yearly tax update
 
 All figures are married filing jointly. The dollar amounts sit in two places:
@@ -77,6 +86,7 @@ After updating, change `TAX.baseYear` and the First Tax Year default together, t
 - AMT, and the extra $100,000 of home equity debt California allows.
 - Purchase closing costs are not added to basis at sale.
 - An unused box spread loss at the end of the projection is given no value.
+- Insurance is a dollar input and does not scale with the price, including inside the maximum price search.
 
 ## Tax-aware engine: rebuilding
 

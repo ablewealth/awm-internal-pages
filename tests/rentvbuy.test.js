@@ -2,7 +2,7 @@
 // No dependencies. The model is read straight from pages/rentvbuy/index.html.
 'use strict';
 const assert = require('assert');
-const { run, TAX, helpers, defaults } = require('./harness');
+const { run, maxPrice, checkPrice, TAX, helpers, defaults } = require('./harness');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -178,6 +178,66 @@ test('Measure ULA: 4% and 5.5% tiers on the whole price, City of Los Angeles onl
   const L = last(run(Object.assign({ inPrice: '6,000,000' }, flat)));
   near(L.ulaAtExit, 6000000 * 0.04, 0.01);
   near(last(run(Object.assign({ inPrice: '12,000,000', inCityLA: false }, flat))).ulaAtExit, 0, 0);
+});
+
+// ── Maximum purchase price ──
+test('max price at the page defaults: cash flow binds before funding', () => {
+  const r = maxPrice();
+  assert.strictEqual(r.cashFlow, 2465000);
+  assert.strictEqual(r.funding, 4245000);
+  assert.strictEqual(r.max, 2465000);
+  assert.strictEqual(r.binding, 'cashFlow');
+  assert.deepStrictEqual(r.buy, { kind: 'upTo', price: 1685000 });
+});
+test('the max price passes both limits and the next $5,000 does not', () => {
+  const r = maxPrice();
+  const at = checkPrice({}, r.max), over = checkPrice({}, r.max + 5000);
+  assert.ok(at.cashFlowOk && at.fundingOk);
+  assert.ok(!over.cashFlowOk);
+  assert.ok(checkPrice({}, r.funding).fundingOk && !checkPrice({}, r.funding + 5000).fundingOk);
+});
+test('testing a price gives the same result as typing it into the page', () => {
+  const typed = last(run({ inPrice: '2,465,000' })), tested = last(run({}, { price: 2465000 }));
+  near(tested.advantage, typed.advantage, 0.001);
+  near(checkPrice({}, 2465000).advantage, typed.advantage, 0.001);
+});
+test('a savings cushion and a cash reserve each lower their limit', () => {
+  const base = maxPrice(), tight = maxPrice({}, { cushion: 3000, reserve: 300000 });
+  assert.ok(tight.cashFlow < base.cashFlow);
+  assert.ok(tight.funding < base.funding);
+  assert.ok(tight.atMax.worstSave >= 3000 && tight.atMax.cashLeft >= 300000);
+});
+test('planned costs lower the cash flow limit, and the tightest year moves to the costly year', () => {
+  const r = maxPrice({ inPlannedCosts: '3: 60,000' });
+  assert.ok(r.cashFlow < maxPrice().cashFlow);
+  assert.strictEqual(r.atMax.worstYear, 3);
+});
+test('no price works when savings cannot cover planned costs', () => {
+  const r = maxPrice({ inPlannedCosts: '1: 500,000' });
+  assert.strictEqual(r.max, null);
+  assert.strictEqual(r.cashFlow, null);
+  assert.strictEqual(r.binding, 'cashFlow');
+});
+test('funding limit follows the max LTV, and a loan with no collateral cannot be funded', () => {
+  assert.ok(maxPrice({ inMaxLTV: 40 }).funding < maxPrice({ inMaxLTV: 50 }).funding);
+  const none = { inCollateral: '0', inSettlement: '0', inHYS: '0' };
+  assert.ok(run(none).collateralGap > 0);
+  assert.strictEqual(maxPrice(none).funding, null);
+});
+test('without the securities loan the funding limit is cash plus the portfolio', () => {
+  const r = maxPrice({ inUseBox: false, inMonthlySavings: '100,000' });
+  // $750K cash plus a $1M portfolio that nets 82.45 cents per dollar sold (half is gain, taxed at 23.8% + 11.3%),
+  // against 20.6% of the price up front
+  assert.strictEqual(r.binding, 'funding');
+  near(r.funding, (750000 + 1000000 * (1 - 0.5 * 0.351)) / 0.206, 5000);
+});
+test('selling the portfolio to fund the purchase also pays the tax on the sale', () => {
+  const m = run({ inUseBox: false, inSettlement: '100,000', inHYS: '50,000' });
+  near(m.fromLiquidation, 412000 - 150000, 0.01);                // cash the purchase still needs
+  near(m.liquidationCapGainsTax, m.portfolioSold * 0.5 * 0.351, 0.01);
+  near(m.portfolioSold, m.fromLiquidation + m.liquidationCapGainsTax, 0.01);
+  near(m.collateral, 1000000 - m.portfolioSold, 0.01);
+  near(m.fundingGap, 0, 0.01);
 });
 
 // ── The page and the tax table stay in step ──
