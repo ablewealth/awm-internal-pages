@@ -90,6 +90,15 @@
 .tone-toggle button.active { background:var(--navy); color:white; }
 .btn-pdf { display:inline-flex; align-items:center; gap:4px; padding:5px 14px; border-radius:6px; border:1px solid var(--navy); background:white; color:var(--navy); font-size:11px; font-weight:600; cursor:pointer; transition:all .2s; }
 .btn-pdf:hover { background:var(--navy); color:white; }
+.scenario-bar h3 { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.scenario-hint { font-size:10px; font-weight:400; text-transform:none; letter-spacing:0; color:var(--muted); }
+.scenario-row { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; }
+.scenario-row .input-group { margin-bottom:0; flex:1 1 180px; min-width:150px; }
+.scenario-row .btn-pdf { height:29px; white-space:nowrap; }
+.scenario-row .btn-quiet { border-color:var(--border); color:var(--muted); font-weight:500; }
+.scenario-row .btn-quiet:hover { background:var(--bg); color:var(--navy); }
+.scenario-sep { width:1px; align-self:stretch; background:var(--border); margin:0 2px; }
+#scStatus { min-height:14px; margin:6px 0 0; }
 .summary-body { font-size:12.5px; line-height:1.7; color:#334155; }
 .summary-body p { margin:0 0 10px; }
 .summary-body .finding { margin:8px 0; padding:10px 14px; border-radius:7px; border-left:3px solid var(--navy); background:var(--bg); }
@@ -101,7 +110,7 @@
 .summary-body .section-heading { font-size:13px; font-weight:700; color:var(--navy); margin:14px 0 6px; }
 .summary-body .assumptions-list { display:grid; grid-template-columns:1fr 1fr; gap:4px 20px; font-size:11px; color:var(--muted); margin:6px 0 10px; }
 @media (max-width: 700px) { .summary-body .assumptions-list { grid-template-columns:1fr; } }
-@media print { .summary-section { page-break-inside: avoid; } .btn-pdf, .tone-toggle { display:none !important; } }
+@media print { .summary-section { page-break-inside: avoid; } .btn-pdf, .tone-toggle, .scenario-bar { display:none !important; } }
 
 </style>
 </head>
@@ -111,6 +120,23 @@
   <p>Able Wealth Management &mdash; Client Scenario Modeling</p>
 </div>
 <div class="container">
+
+<div class="card scenario-bar" id="scenarioBar" style="margin-bottom: 16px;">
+  <h3>Scenario <span class="scenario-hint">Inputs are saved in this browser or to a file on your computer. Nothing is uploaded.</span></h3>
+  <div class="scenario-row">
+    <div class="input-group"><label for="scName">Scenario name</label><input type="text" id="scName" maxlength="80" autocomplete="off" placeholder="Name this set of inputs"></div>
+    <button type="button" class="btn-pdf" id="scSave">Save in this browser</button>
+    <div class="input-group"><label for="scList">Saved in this browser</label><select id="scList"></select></div>
+    <button type="button" class="btn-pdf" id="scLoad">Load</button>
+    <button type="button" class="btn-pdf btn-quiet" id="scDelete">Delete</button>
+    <span class="scenario-sep" aria-hidden="true"></span>
+    <button type="button" class="btn-pdf" id="scExport">Save to file</button>
+    <button type="button" class="btn-pdf" id="scImport">Load from file</button>
+    <input type="file" id="scFile" accept=".json,application/json" hidden>
+    <button type="button" class="btn-pdf btn-quiet" id="scReset">Reset to defaults</button>
+  </div>
+  <p class="note" id="scStatus" role="status" aria-live="polite"></p>
+</div>
 
 <div id="topMetrics" class="grid-4" style="margin-bottom: 16px;"></div>
 
@@ -1555,6 +1581,7 @@ function generatePDF() {
 
 // ── Event wiring ──
 document.querySelectorAll('input, select').forEach(function(inp) {
+  if (inp.closest('#scenarioBar')) return; // scenario controls are not model inputs
   inp.addEventListener('input', function() {
     clearTimeout(inp._t);
     inp._t = setTimeout(function() { try { render(); } catch(e) { console.error('Render error:', e); } }, 250);
@@ -1569,13 +1596,18 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 });
 // Toggle handler for box spread on/off
-el('inUseBox').addEventListener('change', function() {
-  var on = this.checked;
+// Show or hide the box spread inputs to match the toggle
+function syncBoxUI() {
+  var on = el('inUseBox').checked;
   el('boxInputsWrap').style.display = on ? '' : 'none';
   el('noBoxNote').style.display = on ? 'none' : '';
   el('boxToggleLabel').textContent = on ? 'ON \u2014 Downpayment funded via boxspread loan' : 'OFF \u2014 Downpayment from liquid assets';
   el('paydownOptimizerLabel').style.display = on ? '' : 'none';
   el('paydownOptimizerCard').style.display = on ? '' : 'none';
+}
+el('inUseBox').addEventListener('change', function() {
+  var on = this.checked;
+  syncBoxUI();
   // Sync collateral values between modes
   if (!on) {
     el('inCollateralNoBox').value = el('inCollateral').value;
@@ -1604,6 +1636,163 @@ el('btnToneAdvisor').addEventListener('click', function() {
 el('btnPDF').addEventListener('click', function() {
   generatePDF();
 });
+
+// ═══════════════════════════════════════════════════
+// SCENARIO SAVE / LOAD
+// Inputs can be kept in this browser (localStorage) or in a JSON file.
+// Nothing is sent anywhere.
+// ═══════════════════════════════════════════════════
+var SC_KEY = 'awm.rentvbuy.scenarios.v1';
+var SC_TOOL = 'awm-rentvbuy';
+var SC_SKIP = { inBoxAmt: true }; // calculated by the model, not an input
+
+function scFields() {
+  return Array.prototype.filter.call(document.querySelectorAll('input[id], select[id]'), function(n) {
+    return /^in[A-Z]/.test(n.id) && !SC_SKIP[n.id];
+  });
+}
+function collectInputs() {
+  var o = {};
+  scFields().forEach(function(n) { o[n.id] = n.type === 'checkbox' ? n.checked : n.value; });
+  return o;
+}
+// Returns { applied, ignored }. Values that are not plain numbers are left out.
+function applyInputs(inputs) {
+  var applied = 0, known = {};
+  scFields().forEach(function(n) {
+    known[n.id] = true;
+    if (!Object.prototype.hasOwnProperty.call(inputs, n.id)) return;
+    var v = inputs[n.id];
+    if (n.type === 'checkbox') {
+      if (v !== true && v !== false) return;
+      n.checked = v; applied++; return;
+    }
+    if (typeof v !== 'string' && typeof v !== 'number') return;
+    v = String(v).trim();
+    if (n.tagName === 'SELECT') {
+      var ok = Array.prototype.some.call(n.options, function(op) { return op.value === v; });
+      if (!ok) return;
+    } else if (v === '' || v.length > 20 || !/^-?[\d,]*\.?\d*$/.test(v) || !/\d/.test(v)) {
+      return;
+    }
+    n.value = v; applied++;
+  });
+  var ignored = Object.keys(inputs).filter(function(k) { return !known[k]; }).length;
+  syncBoxUI();
+  try { render(); } catch(e) { console.error('Render error:', e); }
+  return { applied: applied, ignored: ignored };
+}
+// Page defaults come from the HTML itself, so a browser restoring form values on reload does not change them
+var scDefaults = (function() {
+  var o = {};
+  scFields().forEach(function(n) {
+    if (n.type === 'checkbox') { o[n.id] = n.defaultChecked; return; }
+    if (n.tagName === 'SELECT') {
+      var d = Array.prototype.filter.call(n.options, function(op) { return op.defaultSelected; })[0] || n.options[0];
+      o[n.id] = d ? d.value : '';
+      return;
+    }
+    o[n.id] = n.defaultValue;
+  });
+  return o;
+})();
+
+function scStatus(msg) { el('scStatus').textContent = msg; }
+function scCount(n) { return n + (n === 1 ? ' input' : ' inputs'); }
+function scReadStore() {
+  try {
+    var o = JSON.parse(window.localStorage.getItem(SC_KEY) || '{}');
+    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+  } catch(e) { return {}; }
+}
+function scWriteStore(store) {
+  try { window.localStorage.setItem(SC_KEY, JSON.stringify(store)); return true; }
+  catch(e) { return false; }
+}
+function scRefreshList(selected) {
+  var list = el('scList'), names = Object.keys(scReadStore()).sort(function(a, b) { return a.localeCompare(b); });
+  list.textContent = '';
+  if (!names.length) {
+    var none = document.createElement('option');
+    none.value = ''; none.textContent = 'None saved yet';
+    list.appendChild(none);
+  }
+  names.forEach(function(name) {
+    var op = document.createElement('option');
+    op.value = name; op.textContent = name;
+    list.appendChild(op);
+  });
+  if (selected && names.indexOf(selected) >= 0) list.value = selected;
+  list.disabled = !names.length;
+  el('scLoad').disabled = !names.length;
+  el('scDelete').disabled = !names.length;
+}
+function scName() { return el('scName').value.trim().slice(0, 80); }
+
+el('scSave').addEventListener('click', function() {
+  var name = scName();
+  if (!name) { scStatus('Enter a scenario name first.'); el('scName').focus(); return; }
+  var store = scReadStore(), existed = Object.prototype.hasOwnProperty.call(store, name);
+  store[name] = { savedAt: new Date().toISOString(), inputs: collectInputs() };
+  if (!scWriteStore(store)) { scStatus('This browser would not save it. Use Save to file instead.'); return; }
+  scRefreshList(name);
+  scStatus((existed ? 'Updated "' : 'Saved "') + name + '" in this browser.');
+});
+el('scLoad').addEventListener('click', function() {
+  var name = el('scList').value, entry = scReadStore()[name];
+  if (!entry || !entry.inputs || typeof entry.inputs !== 'object') { scStatus('Nothing to load.'); return; }
+  var r = applyInputs(entry.inputs);
+  el('scName').value = name;
+  scStatus('Loaded "' + name + '" (' + scCount(r.applied) + ').');
+});
+el('scDelete').addEventListener('click', function() {
+  var name = el('scList').value, store = scReadStore();
+  if (!name || !Object.prototype.hasOwnProperty.call(store, name)) return;
+  if (!window.confirm('Delete "' + name + '" from this browser?')) return;
+  delete store[name];
+  scWriteStore(store);
+  scRefreshList();
+  scStatus('Deleted "' + name + '".');
+});
+el('scExport').addEventListener('click', function() {
+  var name = scName();
+  var payload = { tool: SC_TOOL, version: 1, name: name, savedAt: new Date().toISOString(), inputs: collectInputs() };
+  var slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'scenario';
+  var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = slug + '-rentvbuy-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  scStatus('Saved the inputs to a file in your downloads.');
+});
+el('scImport').addEventListener('click', function() { el('scFile').click(); });
+el('scFile').addEventListener('change', function() {
+  var file = this.files && this.files[0];
+  this.value = '';
+  if (!file) return;
+  if (file.size > 100000) { scStatus('That file is too large to be a scenario file.'); return; }
+  var reader = new FileReader();
+  reader.onerror = function() { scStatus('Could not read that file.'); };
+  reader.onload = function() {
+    var data;
+    try { data = JSON.parse(String(reader.result)); } catch(e) { scStatus('That file is not a scenario file.'); return; }
+    if (!data || typeof data !== 'object' || data.tool !== SC_TOOL || !data.inputs || typeof data.inputs !== 'object' || Array.isArray(data.inputs)) {
+      scStatus('That file is not a rent v buy scenario file.'); return;
+    }
+    var r = applyInputs(data.inputs);
+    if (typeof data.name === 'string') el('scName').value = data.name.slice(0, 80);
+    scStatus('Loaded ' + scCount(r.applied) + ' from ' + file.name + (r.ignored ? ' (' + r.ignored + ' unrecognized entries ignored).' : '.'));
+  };
+  reader.readAsText(file);
+});
+el('scReset').addEventListener('click', function() {
+  applyInputs(scDefaults);
+  el('scName').value = '';
+  scStatus('Inputs reset to the page defaults.');
+});
+scRefreshList();
 
 // ── Go ──
 try { render(); } catch(e) {
